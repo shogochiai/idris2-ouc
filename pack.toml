@@ -1,0 +1,9 @@
+[custom.all.idris2-cdk]
+type = "github"
+url  = "https://github.com/shogochiai/idris2-cdk"
+ipkg = "idris2-cdk.ipkg"
+
+[custom.all.ouc]
+type = "local"
+path = "."
+ipkg = "ouc.ipkg"

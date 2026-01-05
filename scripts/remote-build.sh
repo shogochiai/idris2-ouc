@@ -54,19 +54,33 @@ done
 # Setup script to run on server
 SETUP_SCRIPT='
 set -e
+export PATH="$HOME/.local/bin:$PATH"
+export IDRIS2_PREFIX="$HOME/.local"
+
 echo "=== Installing dependencies ==="
 apt-get update
-apt-get install -y build-essential libgmp-dev git curl
+apt-get install -y build-essential libgmp-dev git curl chezscheme
 
-echo "=== Installing pack (Idris2 package manager) ==="
-curl -sSL https://raw.githubusercontent.com/stefan-hoeck/idris2-pack/main/install.bash | bash
+echo "=== Installing Idris2 ==="
+if [ ! -f "$HOME/.local/bin/idris2" ]; then
+    cd /tmp
+    git clone https://github.com/idris-lang/Idris2.git
+    cd Idris2
+    make bootstrap SCHEME=chezscheme
+    make install PREFIX="$HOME/.local"
+fi
 
-export PATH="$HOME/.pack/bin:$PATH"
-export IDRIS2_PREFIX="$HOME/.pack"
+echo "=== Installing idris2-cdk ==="
+cd /root
+if [ -d idris2-cdk ]; then rm -rf idris2-cdk; fi
+git clone https://github.com/shogochiai/idris2-cdk.git
+cd idris2-cdk
+idris2 --install idris2-cdk.ipkg
 
 echo "=== Building OUC ==="
 cd /root/ouc
-pack build ouc.ipkg
+rm -rf build
+idris2 --build ouc.ipkg
 
 echo "=== Build complete ==="
 '

@@ -3,18 +3,13 @@ version = 0.1.0
 authors = "OptimisticUpgrader Team"
 brief   = "Optimistic Upgrader Canister for ICP"
 
+depends = idris2-cdk
+
 sourcedir = "src"
 
 modules = Util.StringHex
         , Util.StringCase
         , FRC.Core
-        -- ICP Base Layer
-        , ICP.IC0
-        , ICP.API
-        , ICP.Candid.Types
-        , ICP.StableMemory
-        , ICP.Management.HttpOutcall
-        , ICP.Management.TECDSA
         -- OUC Domain Layer
         , OUC.Core
         , OUC.Signatures
