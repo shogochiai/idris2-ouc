@@ -8,6 +8,14 @@ sourcedir = "src"
 modules = Util.StringHex
         , Util.StringCase
         , FRC.Core
+        -- ICP Base Layer
+        , ICP.IC0
+        , ICP.API
+        , ICP.Candid.Types
+        , ICP.StableMemory
+        , ICP.Management.HttpOutcall
+        , ICP.Management.TECDSA
+        -- OUC Domain Layer
         , OUC.Core
         , OUC.Signatures
         , OUC.MultiSig
@@ -15,6 +23,7 @@ modules = Util.StringHex
         , AuditorPool.Core
         , Rewards.Core
         , Proposals.Core
+        -- EVM Communication Layer
         , HttpOutcall.Core
         , HttpOutcall.EvmRpc
         , HttpOutcall.TxSender.Types
