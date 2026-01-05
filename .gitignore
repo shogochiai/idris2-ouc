@@ -24,3 +24,21 @@ Thumbs.db
 # Logs
 logs/
 *.log
+
+# Keys and secrets
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+*.pub
+
+# Environment
+.env
+.env.*
+*.secret
+
+# Large files
+*.wasm
+*.so
+*.dylib

@@ -10,6 +10,7 @@ module ERC7546.Upgrade
 import FRC.Core
 import OUC.Core
 import OUC.MultiSig
+import OUC.Signatures
 import HttpOutcall.Core
 import HttpOutcall.EvmRpc
 import HttpOutcall.TxSender
@@ -18,6 +19,17 @@ import Data.List
 import Data.Maybe
 
 %default total
+
+-- =============================================================================
+-- Type Conversion Helpers
+-- =============================================================================
+
+||| Convert AggregatedSignatures to SignatureBundle for execution
+toSignatureBundle : AggregatedSignatures -> SignatureBundle
+toSignatureBundle agg = MkSignatureBundle
+  agg.proposalId.value
+  agg.proposerSig
+  (map (\(aid, sig) => (aid.principal.text, sig)) agg.auditorSigs)
 
 -- =============================================================================
 -- Upgrade Execution Types
@@ -150,7 +162,7 @@ executeUpgradeViaOU req now = do
         req.proposal.ou.hex
         req.proposal.target.hex
         req.proposal.newImpl.hex
-        req.signatures
+        (toSignatureBundle req.signatures)
         req.nonce
         req.maxGasPrice
 

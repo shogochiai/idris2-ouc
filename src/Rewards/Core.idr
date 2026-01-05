@@ -11,6 +11,7 @@ module Rewards.Core
 import FRC.Core
 import OUC.Core
 import Data.List
+import Data.Nat
 
 %default total
 
@@ -123,15 +124,15 @@ calculateReward :
   Bool ->              -- Was review fast?
   TokenAmount
 calculateReward config fee highQuality fast =
-  let baseReward = (fee * config.auditorRewardShare) `div` 100
-      qualityBonus = if highQuality then config.qualityBonus else 0
-      speedBonus = if fast then config.speedBonus else 0
-  in baseReward + qualityBonus + speedBonus
+  let baseReward = divNatNZ (fee * config.auditorRewardShare) 100 SIsNonZero
+  in let qualityBonus = if highQuality then config.qualityBonus else 0
+     in let speedBonus = if fast then config.speedBonus else 0
+        in baseReward + qualityBonus + speedBonus
 
 ||| Calculate treasury deposit from fee
 public export
 calculateTreasuryDeposit : RewardsConfig -> TokenAmount -> TokenAmount
-calculateTreasuryDeposit config fee = (fee * config.treasuryShare) `div` 100
+calculateTreasuryDeposit config fee = divNatNZ (fee * config.treasuryShare) 100 SIsNonZero
 
 -- =============================================================================
 -- Reward Operations (FRC-compliant)
@@ -152,15 +153,20 @@ collectFee state pid payer amount now =
               (Unauthorized ("Fee " ++ show amount ++ " < " ++ show state.config.proposalFee))
     else
       let fee = MkFeeCollection pid payer amount now
-          treasuryDeposit = calculateTreasuryDeposit state.config amount
-          newTreasury = { balance := state.treasury.balance + treasuryDeposit
-                       , totalCollected := state.treasury.totalCollected + amount
-                       } state.treasury
-      in ok Update "collectFee"
-            ("Collected " ++ show amount ++ " for " ++ show pid)
-            ({ treasury := newTreasury
-             , fees := fee :: state.fees
-             } state)
+      in let treasuryDeposit = calculateTreasuryDeposit state.config amount
+         in let newTreasury = MkTreasury
+                  (state.treasury.balance + treasuryDeposit)
+                  (state.treasury.totalCollected + amount)
+                  state.treasury.totalDistributed
+            in let newState = MkRewardsState
+                     newTreasury
+                     (fee :: state.fees)
+                     state.distributions
+                     state.pendingRewards
+                     state.config
+               in ok Update "collectFee"
+                     ("Collected " ++ show amount ++ " for " ++ show pid)
+                     newState
 
 ||| Queue reward for auditor
 public export
@@ -177,10 +183,16 @@ queueReward state aid pid highQuality fast =
     Nothing => notFound Update "queueReward" ("No fee collected for " ++ show pid)
     Just fee =>
       let reward = calculateReward state.config fee.amount highQuality fast
-          pending = (aid, reward, pid)
-      in ok Update "queueReward"
-            ("Queued " ++ show reward ++ " for " ++ show aid)
-            ({ pendingRewards := pending :: state.pendingRewards } state)
+      in let pending = (aid, reward, pid)
+         in let newState = MkRewardsState
+                  state.treasury
+                  state.fees
+                  state.distributions
+                  (pending :: state.pendingRewards)
+                  state.config
+            in ok Update "queueReward"
+                  ("Queued " ++ show reward ++ " for " ++ show aid)
+                  newState
 
 ||| Distribute a pending reward
 public export
@@ -192,27 +204,31 @@ distributeReward :
   Nat ->               -- currentTime
   FR (RewardsState, TokenAmount)
 distributeReward state aid pid txRef now =
-  let pending = find (\(a, _, p) => a == aid && p == pid) state.pendingRewards
+  let pending = find (\x => case x of (a, _, p) => a == aid && p == pid) state.pendingRewards
   in case pending of
     Nothing => notFound Update "distributeReward"
                ("No pending reward for " ++ show aid ++ " on " ++ show pid)
     Just (_, amount, _) =>
       if amount > state.treasury.balance
         then fail Update "distributeReward" "Insufficient treasury balance"
-                  (InvalidState "Treasury has " ++ show state.treasury.balance ++ " but need " ++ show amount)
+                  (InvalidState ("Treasury has " ++ show state.treasury.balance ++ " but need " ++ show amount))
         else
           let dist = MkRewardDistribution aid pid amount "Review reward" now txRef
-              newPending = filter (\(a, _, p) => not (a == aid && p == pid))
-                                  state.pendingRewards
-              newTreasury = { balance := state.treasury.balance `minus` amount
-                           , totalDistributed := state.treasury.totalDistributed + amount
-                           } state.treasury
-          in ok Update "distributeReward"
-                ("Distributed " ++ show amount ++ " to " ++ show aid)
-                ({ treasury := newTreasury
-                 , distributions := dist :: state.distributions
-                 , pendingRewards := newPending
-                 } state, amount)
+          in let newPending = filter (\x => case x of (a, _, p) => not (a == aid && p == pid))
+                                     state.pendingRewards
+             in let newTreasury = MkTreasury
+                      (state.treasury.balance `minus` amount)
+                      state.treasury.totalCollected
+                      (state.treasury.totalDistributed + amount)
+                in let newState = MkRewardsState
+                         newTreasury
+                         state.fees
+                         (dist :: state.distributions)
+                         newPending
+                         state.config
+                   in ok Update "distributeReward"
+                         ("Distributed " ++ show amount ++ " to " ++ show aid)
+                         (newState, amount)
 
 ||| Get pending reward for auditor
 public export
@@ -221,9 +237,9 @@ getPendingReward :
   AuditorId ->
   FR TokenAmount
 getPendingReward state aid =
-  let pending = filter (\(a, _, _) => a == aid) state.pendingRewards
-      total = foldl (\acc, (_, amt, _) => acc + amt) 0 pending
-  in ok Query "getPendingReward" ("Pending for " ++ show aid ++ ": " ++ show total) total
+  let pending = filter (\x => case x of (a, _, _) => a == aid) state.pendingRewards
+  in let sum = foldl (\acc, x => case x of (_, amt, _) => acc + amt) 0 pending
+     in ok Query "getPendingReward" ("Pending for " ++ show aid ++ ": " ++ show sum) sum
 
 ||| Get total distributed to auditor
 public export
@@ -233,8 +249,8 @@ getTotalDistributed :
   FR TokenAmount
 getTotalDistributed state aid =
   let dists = filter (\d => d.recipientId == aid) state.distributions
-      total = foldl (\acc, d => acc + d.amount) 0 dists
-  in ok Query "getTotalDistributed" ("Total for " ++ show aid ++ ": " ++ show total) total
+  in let sum = foldl (\acc, d => acc + d.amount) 0 dists
+     in ok Query "getTotalDistributed" ("Total for " ++ show aid ++ ": " ++ show sum) sum
 
 ||| Get treasury balance
 public export

@@ -98,10 +98,11 @@ arbitrumOne = MkChainTxConfig 42161 "https://arb1.arbitrum.io/rpc" 1000000000 20
 ||| Get chain config by ID
 public export
 getChainConfig : Nat -> Maybe ChainTxConfig
-getChainConfig 1     = Just ethereumMainnet
-getChainConfig 8453  = Just baseMainnet
-getChainConfig 42161 = Just arbitrumOne
-getChainConfig _     = Nothing
+getChainConfig n =
+  if n == 1 then Just ethereumMainnet
+  else if n == 8453 then Just baseMainnet
+  else if n == 42161 then Just arbitrumOne
+  else Nothing
 
 -- =============================================================================
 -- Transaction Parameters

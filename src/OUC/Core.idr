@@ -60,6 +60,24 @@ Eq Principal where
   p1 == p2 = p1.text == p2.text
 
 -- =============================================================================
+-- Auditor Types (must be before UpgradeProposal which uses AuditorId)
+-- =============================================================================
+
+||| Auditor identifier
+public export
+record AuditorId where
+  constructor MkAuditorId
+  principal : Principal
+
+public export
+Show AuditorId where
+  show a = "Auditor(" ++ show a.principal ++ ")"
+
+public export
+Eq AuditorId where
+  a1 == a2 = a1.principal == a2.principal
+
+-- =============================================================================
 -- Proposal Types
 -- =============================================================================
 
@@ -98,23 +116,35 @@ Show ProposalStatus where
   show Expired     = "Expired"
   show Cancelled   = "Cancelled"
 
+public export
+Eq ProposalStatus where
+  Pending     == Pending     = True
+  UnderReview == UnderReview = True
+  Approved    == Approved    = True
+  Rejected    == Rejected    = True
+  Executed    == Executed    = True
+  Expired     == Expired     = True
+  Cancelled   == Cancelled   = True
+  _           == _           = False
+
 ||| Upgrade proposal payload
 ||| Contains all information needed to execute an upgrade
 public export
 record UpgradeProposal where
   constructor MkUpgradeProposal
-  id           : ProposalId
-  chainId      : ChainId
-  target       : EvmAddress     -- Contract to upgrade (ERC-7546 Proxy)
-  newImpl      : EvmAddress     -- New implementation address
-  ou           : EvmAddress     -- OptimisticUpgrader contract
-  proposer     : Principal      -- ICP principal who submitted
-  rationale    : String         -- Human-readable justification
-  codeHash     : String         -- Hash of new implementation code
-  status       : ProposalStatus
-  createdAt    : Nat            -- IC timestamp (nanoseconds)
-  updatedAt    : Nat
-  expiresAt    : Nat
+  id               : ProposalId
+  chainId          : ChainId
+  target           : EvmAddress     -- Contract to upgrade (ERC-7546 Proxy)
+  newImpl          : EvmAddress     -- New implementation address
+  ou               : EvmAddress     -- OptimisticUpgrader contract
+  proposer         : Principal      -- ICP principal who submitted
+  rationale        : String         -- Human-readable justification
+  codeHash         : String         -- Hash of new implementation code
+  status           : ProposalStatus
+  assignedAuditors : List AuditorId -- VRF/commit-reveal selected auditors
+  createdAt        : Nat            -- IC timestamp (nanoseconds)
+  updatedAt        : Nat
+  expiresAt        : Nat
 
 public export
 Show UpgradeProposal where
@@ -122,22 +152,8 @@ Show UpgradeProposal where
         ++ ", target=" ++ show p.target ++ ", status=" ++ show p.status ++ "}"
 
 -- =============================================================================
--- Auditor Types
+-- Auditor Status and Record Types
 -- =============================================================================
-
-||| Auditor identifier
-public export
-record AuditorId where
-  constructor MkAuditorId
-  principal : Principal
-
-public export
-Show AuditorId where
-  show a = "Auditor(" ++ show a.principal ++ ")"
-
-public export
-Eq AuditorId where
-  a1 == a2 = a1.principal == a2.principal
 
 ||| Auditor status
 public export
@@ -153,6 +169,14 @@ Show AuditorStatus where
   show Suspended = "Suspended"
   show Slashed   = "Slashed"
   show Inactive  = "Inactive"
+
+public export
+Eq AuditorStatus where
+  Active    == Active    = True
+  Suspended == Suspended = True
+  Slashed   == Slashed   = True
+  Inactive  == Inactive  = True
+  _         == _         = False
 
 ||| Auditor record
 public export
@@ -249,7 +273,7 @@ submitProposal state chainId target newImpl ou proposer rationale codeHash now =
       expiresAt = now + 604800000000000  -- 7 days in nanoseconds
       proposal = MkUpgradeProposal
         proposalId chainId target newImpl ou proposer rationale codeHash
-        Pending now now expiresAt
+        Pending [] now now expiresAt  -- assignedAuditors starts empty
       newState = { nextProposalId := state.nextProposalId + 1
                  , proposals := proposal :: state.proposals
                  } state
@@ -275,11 +299,12 @@ assignAuditor state pid aid now = do
   proposal <- findProposal state pid
   case proposal.status of
     Pending =>
-      let updated : UpgradeProposal
+      let newAuditors = aid :: proposal.assignedAuditors
+          updated : UpgradeProposal
           updated = MkUpgradeProposal
             proposal.id proposal.chainId proposal.target proposal.newImpl
             proposal.ou proposal.proposer proposal.rationale proposal.codeHash
-            UnderReview proposal.createdAt now proposal.expiresAt
+            UnderReview newAuditors proposal.createdAt now proposal.expiresAt
           newProposals = map (\p => if p.id == pid then updated else p) state.proposals
           newState : OUCState
           newState = MkOUCState state.nextProposalId newProposals state.auditors state.reviews state.owner state.version
@@ -313,7 +338,7 @@ submitReview state pid aid decision comment sig now = do
           updated = MkUpgradeProposal
             proposal.id proposal.chainId proposal.target proposal.newImpl
             proposal.ou proposal.proposer proposal.rationale proposal.codeHash
-            newStatus proposal.createdAt now proposal.expiresAt
+            newStatus proposal.assignedAuditors proposal.createdAt now proposal.expiresAt
           newProposals = map (\p => if p.id == pid then updated else p) state.proposals
           newState : OUCState
           newState = MkOUCState state.nextProposalId newProposals state.auditors (review :: state.reviews) state.owner state.version
@@ -338,7 +363,7 @@ markExecuted state pid txHash now = do
           updated = MkUpgradeProposal
             proposal.id proposal.chainId proposal.target proposal.newImpl
             proposal.ou proposal.proposer proposal.rationale proposal.codeHash
-            Executed proposal.createdAt now proposal.expiresAt
+            Executed proposal.assignedAuditors proposal.createdAt now proposal.expiresAt
           newProposals = map (\p => if p.id == pid then updated else p) state.proposals
           newState : OUCState
           newState = MkOUCState state.nextProposalId newProposals state.auditors state.reviews state.owner state.version

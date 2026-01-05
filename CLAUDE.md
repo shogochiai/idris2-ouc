@@ -1,5 +1,12 @@
 # Project Agent Instructions
 
+## Build
+
+```bash
+# Remote build on Hetzner CCX33 (32GB RAM) - spins up, builds, downloads artifacts, terminates
+./scripts/remote-build.sh
+```
+
 ## Quick Reference
 
 ```bash

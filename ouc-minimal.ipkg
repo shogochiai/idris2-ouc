@@ -1,0 +1,11 @@
+package ouc-minimal
+version = 0.1.0
+authors = "OptimisticUpgrader Team"
+brief   = "Minimal build to test compilation"
+
+sourcedir = "src"
+
+-- Only the lightest modules
+modules = Util.StringHex
+        , Util.StringCase
+        , HttpOutcall.TxSender.Types

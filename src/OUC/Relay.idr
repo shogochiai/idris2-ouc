@@ -15,31 +15,17 @@ import OUC.Core
 import HttpOutcall.Core
 import HttpOutcall.EvmRpc
 import HttpOutcall.TxSender
+import HttpOutcall.TxSender.Abi as Abi
 import Data.List
 import Data.String
+import Data.Nat
 import Util.StringHex as SHex
 
 %default total
 
--- =============================================================================
--- OU Contract Selectors
--- =============================================================================
-
-||| castVote(uint256,uint8,bytes32)
-SEL_CAST_VOTE : String
-SEL_CAST_VOTE = "0x5c19a95c"
-
-||| submitProposerSignature(uint256,bytes32)
-SEL_SUBMIT_PROPOSER_SIG : String
-SEL_SUBMIT_PROPOSER_SIG = "0x7d4b1d9e"
-
-||| getVotingStatus(uint256)
-SEL_GET_VOTING_STATUS : String
-SEL_GET_VOTING_STATUS = "0x8a2c7b5e"
-
-||| createProposal(uint256,address,address,bytes4,uint256)
-SEL_CREATE_PROPOSAL : String
-SEL_CREATE_PROPOSAL = "0x3b2d5c8a"
+-- Safe division helper
+safeDiv10 : Nat -> Nat
+safeDiv10 n = divNatNZ n 10 SIsNonZero
 
 -- =============================================================================
 -- Decision Encoding
@@ -74,20 +60,26 @@ reviewToVoteDecision (RequestChanges _)   = RequestChanges
 -- Calldata Builders
 -- =============================================================================
 
-||| Encode uint256 using Integer div/mod (Nat doesn't have Integral)
-encodeUint256 : Nat -> String
-encodeUint256 n = SHex.padTo32 (natToHex n)
-  where
-    hexDigit : Integer -> Char
-    hexDigit d = if d < 10 then chr (ord '0' + cast d) else chr (ord 'a' + cast (d - 10))
+||| Helper: convert single hex digit
+hexDigitChar : Integer -> Char
+hexDigitChar d = if d < 10 then chr (ord '0' + cast d) else chr (ord 'a' + cast (d - 10))
 
-    natToHex : Nat -> String
-    natToHex 0 = "0"
-    natToHex n = pack $ reverse $ go (cast n)
-      where
-        go : Integer -> List Char
-        go 0 = []
-        go k = hexDigit (k `mod` 16) :: go (k `div` 16)
+||| Helper: convert integer to hex chars
+partial
+intToHexChars : Integer -> List Char
+intToHexChars 0 = []
+intToHexChars k = hexDigitChar (k `mod` 16) :: intToHexChars (k `div` 16)
+
+||| Helper: convert nat to hex string
+partial
+natToHexStr : Nat -> String
+natToHexStr 0 = "0"
+natToHexStr n = pack $ reverse $ intToHexChars (cast n)
+
+||| Encode uint256 using Integer div/mod (Nat doesn't have Integral)
+partial
+encodeUint256 : Nat -> String
+encodeUint256 n = SHex.padTo32 (natToHexStr n)
 
 ||| Encode uint8 (0-255)
 encodeUint8 : Nat -> String
@@ -95,10 +87,7 @@ encodeUint8 n =
   let i = cast {to=Integer} n
       hi = i `div` 16
       lo = i `mod` 16
-  in SHex.padTo32 (pack [hexChar hi, hexChar lo])
-  where
-    hexChar : Integer -> Char
-    hexChar d = if d < 10 then chr (ord '0' + cast d) else chr (ord 'a' + cast (d - 10))
+  in SHex.padTo32 (pack [hexDigitChar hi, hexDigitChar lo])
 
 ||| Encode bytes32 (signature hash)
 encodeBytes32 : String -> String
@@ -107,13 +96,14 @@ encodeBytes32 s = SHex.stripHexPrefix s
 ||| Build castVote calldata
 ||| castVote(uint256 proposalId, uint8 decision, bytes32 sigHash)
 public export
+partial
 buildCastVoteCalldata : Nat -> VoteDecision -> String -> FR String
 buildCastVoteCalldata proposalId decision sigHash =
   if sigHash == ""
     then fail Update "buildCastVoteCalldata" "Empty signature"
               (DecodeError "Signature hash required")
     else
-      let calldata = SEL_CAST_VOTE
+      let calldata = Abi.SEL_CAST_VOTE
                   ++ encodeUint256 proposalId
                   ++ encodeUint8 (decisionToInt decision)
                   ++ encodeBytes32 sigHash
@@ -123,13 +113,14 @@ buildCastVoteCalldata proposalId decision sigHash =
 
 ||| Build submitProposerSignature calldata
 public export
+partial
 buildProposerSigCalldata : Nat -> String -> FR String
 buildProposerSigCalldata proposalId sigHash =
   if sigHash == ""
     then fail Update "buildProposerSigCalldata" "Empty signature"
               (DecodeError "Signature hash required")
     else
-      let calldata = SEL_SUBMIT_PROPOSER_SIG
+      let calldata = Abi.SEL_SUBMIT_PROPOSER_SIG
                   ++ encodeUint256 proposalId
                   ++ encodeBytes32 sigHash
       in ok Update "buildProposerSigCalldata"
@@ -138,9 +129,10 @@ buildProposerSigCalldata proposalId sigHash =
 
 ||| Build getVotingStatus calldata
 public export
+partial
 buildGetStatusCalldata : Nat -> FR String
 buildGetStatusCalldata proposalId =
-  let calldata = SEL_GET_VOTING_STATUS ++ encodeUint256 proposalId
+  let calldata = Abi.SEL_GET_VOTING_STATUS ++ encodeUint256 proposalId
   in ok Query "buildGetStatusCalldata"
         ("Built getVotingStatus calldata for proposal " ++ show proposalId)
         calldata
@@ -169,6 +161,7 @@ Show VotingStatus where
 ||| Relay vote to OU contract on EVM
 ||| This is the main entry point for auditors
 public export
+partial
 relayVote :
   ChainTxConfig ->
   String ->           -- OU contract address
@@ -186,7 +179,7 @@ relayVote config ouAddr proposalId decision sigHash nonce = do
         config.chainId
         nonce
         config.maxGasPrice
-        (config.maxGasPrice `div` 10)
+        (safeDiv10 config.maxGasPrice)
         config.defaultGasLimit
         ouAddr
         0
@@ -200,6 +193,7 @@ relayVote config ouAddr proposalId decision sigHash nonce = do
 
 ||| Relay proposer signature to OU contract
 public export
+partial
 relayProposerSig :
   ChainTxConfig ->
   String ->           -- OU contract address
@@ -214,7 +208,7 @@ relayProposerSig config ouAddr proposalId sigHash nonce = do
         config.chainId
         nonce
         config.maxGasPrice
-        (config.maxGasPrice `div` 10)
+        (safeDiv10 config.maxGasPrice)
         config.defaultGasLimit
         ouAddr
         0
@@ -226,6 +220,7 @@ relayProposerSig config ouAddr proposalId sigHash nonce = do
 
 ||| Query voting status from OU contract (via eth_call)
 public export
+partial
 queryVotingStatus :
   ChainTxConfig ->
   String ->           -- OU contract address
@@ -293,7 +288,7 @@ getAssignedProposals state auditorId =
 
     toSummary : UpgradeProposal -> ProposalSummary
     toSummary p = MkProposalSummary
-      (cast p.id)  -- Convert ProposalId to Nat
+      p.id.value  -- ProposalId.value is Nat
       ("Upgrade to " ++ p.newImpl.hex)
       ("Chain " ++ show p.chainId.value)
       p.target.hex
@@ -304,6 +299,7 @@ getAssignedProposals state auditorId =
 ||| Submit vote for a proposal
 ||| Main entry point for auditors - hides all chain complexity
 public export
+partial
 submitVote :
   OUCState ->
   AuditorId ->
@@ -332,7 +328,7 @@ submitVote state auditorId proposalId decision sig = do
       -- Get nonce (would need to track per-chain)
       let nonce = 0
 
-      result <- relayVote config ouAddr (cast proposalId) voteDecision sigHash nonce
+      result <- relayVote config ouAddr proposalId.value voteDecision sigHash nonce
 
       -- This will currently fail with "vetKey not implemented"
       -- When implemented, would return VoteSubmitted

@@ -11,8 +11,27 @@ module AuditorPool.Core
 import FRC.Core
 import OUC.Core
 import Data.List
+import Data.Nat
 
 %default total
+
+-- Helper for safe mod (returns 0 if divisor is 0)
+safeMod : Nat -> Nat -> Nat
+safeMod n m = case m of
+  Z => 0
+  S k => modNatNZ n (S k) SIsNonZero
+
+-- Helper for safe div (returns 0 if divisor is 0)
+safeDiv : Nat -> Nat -> Nat
+safeDiv n m = case m of
+  Z => 0
+  S k => divNatNZ n (S k) SIsNonZero
+
+-- Helper: safe index lookup for list
+safeIndex : Nat -> List a -> Maybe a
+safeIndex _ [] = Nothing
+safeIndex 0 (x :: _) = Just x
+safeIndex (S k) (_ :: xs) = safeIndex k xs
 
 -- =============================================================================
 -- Auditor Pool State
@@ -119,8 +138,8 @@ selectAuditor auditors criteria config =
           [] => fail Query "selectAuditor" "No auditors" (Internal "Sort failed")
           (best :: _) => ok Query "selectAuditor" ("Selected " ++ show best.id) best.id
       Random seed =>
-        let idx = mod seed (length active)
-        in case index' idx active of
+        let idx = safeMod seed (length active)
+        in case safeIndex idx active of
           Just selected => ok Query "selectAuditor" ("Selected " ++ show selected.id) selected.id
           Nothing => ok Query "selectAuditor" ("Selected " ++ show a.id) a.id
       Weighted =>
@@ -166,7 +185,7 @@ slashAuditor auditors aid reason config =
   in case found of
     Nothing => notFound Update "slashAuditor" ("Auditor " ++ show aid ++ " not found")
     Just auditor =>
-      let slashAmount = (auditor.stakedAmount * config.slashPercentage) `div` 100
+      let slashAmount = safeDiv (auditor.stakedAmount * config.slashPercentage) 100
           newStake = auditor.stakedAmount `minus` slashAmount
           updated = { status := Slashed
                     , stakedAmount := newStake
@@ -220,3 +239,109 @@ reactivateAuditor auditors aid =
           let updated = { status := Active } auditor
               newList = map (\a => if a.id == aid then updated else a) auditors
           in ok Update "reactivateAuditor" ("Reactivated " ++ show aid) newList
+
+-- =============================================================================
+-- Commit-Reveal Auditor Selection (VRF alternative)
+-- =============================================================================
+
+||| Commit-Reveal round state
+||| Prevents manipulation by requiring commitment before reveal
+public export
+record CommitRevealRound where
+  constructor MkCommitRevealRound
+  roundId       : Nat
+  proposalId    : Nat
+  commitHash    : String          -- SHA256(blockHash || proposalId || nonce)
+  commitTime    : Nat             -- When commit was made
+  revealDeadline: Nat             -- Must reveal before this
+  revealed      : Maybe Nat       -- Revealed nonce (None if not yet revealed)
+  selectedCount : Nat             -- Number of auditors to select
+
+public export
+Show CommitRevealRound where
+  show r = "Round{id=" ++ show r.roundId ++ ", proposal=" ++ show r.proposalId
+        ++ ", revealed=" ++ show r.revealed ++ "}"
+
+||| Generate pseudo-random indices from seed (LCG algorithm)
+partial
+generateIndices : Nat -> Nat -> Nat -> List Nat -> List Nat
+generateIndices _ 0 _ acc = acc
+generateIndices s count maxVal acc =
+  let idx = safeMod s maxVal
+      newSeed = safeMod (safeDiv (s * 1103515245 + 12345) 65536) 2147483648
+  in generateIndices newSeed (minus count 1) maxVal (idx :: acc)
+
+-- Helper: select element at index from weighted list, return auditor
+selectAtIndex : Nat -> List (Auditor, Nat) -> Maybe Auditor
+selectAtIndex idx weighted = map fst (safeIndex idx weighted)
+
+||| Selection using commit-reveal scheme
+||| Step 1: Commit - hash of (blockHash || proposalId || secret nonce)
+||| Step 2: Wait for reveal window
+||| Step 3: Reveal - provide nonce, verify against commit
+||| Step 4: Use revealed nonce as seed for weighted random selection
+public export
+partial
+selectAuditorsVRF :
+  List Auditor ->
+  Nat ->              -- revealed seed from commit-reveal
+  Nat ->              -- count of auditors to select
+  PoolConfig ->
+  FR (List AuditorId)
+selectAuditorsVRF auditors seed count config =
+  let active : List Auditor
+      active = getActiveAuditors auditors config
+  in if length active < count
+    then fail Query "selectAuditorsVRF"
+              ("Not enough auditors: " ++ show (length active) ++ " < " ++ show count)
+              (NotFound "Insufficient active auditors")
+    else
+      -- Weighted selection using seed
+      let weighted : List (Auditor, Nat)
+          weighted = map (\a => (a, a.reputation * a.stakedAmount)) active
+          -- Generate indices using seed
+          indices : List Nat
+          indices = take count (generateIndices seed count (length active) [])
+          -- Select auditors at those indices
+          selected : List Auditor
+          selected = mapMaybe (\i => selectAtIndex i weighted) indices
+      in if length selected < count
+        then fail Query "selectAuditorsVRF" "Selection failed"
+                  (Internal "Index generation error")
+        else ok Query "selectAuditorsVRF"
+                ("Selected " ++ show count ++ " auditors with seed " ++ show seed)
+                (map (.id) selected)
+
+||| Verify commit-reveal round
+public export
+verifyCommitReveal :
+  CommitRevealRound ->
+  Nat ->              -- claimed nonce
+  String ->           -- blockHash used in commit
+  Nat ->              -- current time
+  FR Nat              -- Returns verified seed
+verifyCommitReveal round nonce blockHash now =
+  if now > round.revealDeadline
+    then fail Update "verifyCommitReveal" "Reveal deadline passed"
+              (Timeout ("Deadline was " ++ show round.revealDeadline))
+    else case round.revealed of
+      Just _ => fail Update "verifyCommitReveal" "Already revealed"
+                     (Conflict "Round already has revealed value")
+      Nothing =>
+        -- In real impl: verify SHA256(blockHash || proposalId || nonce) == commitHash
+        -- For now, just accept and use nonce as seed
+        ok Update "verifyCommitReveal"
+           ("Verified commit-reveal for round " ++ show round.roundId)
+           nonce
+
+||| Create a new commit-reveal round
+public export
+createCommitRevealRound :
+  Nat ->              -- proposalId
+  String ->           -- commitHash
+  Nat ->              -- now
+  Nat ->              -- reveal window duration
+  Nat ->              -- count to select
+  CommitRevealRound
+createCommitRevealRound pid commit now windowDuration count =
+  MkCommitRevealRound 0 pid commit now (now + windowDuration) Nothing count

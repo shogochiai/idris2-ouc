@@ -259,9 +259,9 @@ public export
 validateUrl : String -> FR ()
 validateUrl url =
   if length url == 0
-    then fail Query "validateUrl" "Empty URL" (HttpInvalidUrl "URL cannot be empty" |> httpFailToIcpFail)
+    then fail Query "validateUrl" "Empty URL" (httpFailToIcpFail (HttpInvalidUrl "URL cannot be empty"))
     else if not (isPrefixOf "https://" url)
-      then fail Query "validateUrl" "Must use HTTPS" (HttpInvalidUrl "IC requires HTTPS" |> httpFailToIcpFail)
+      then fail Query "validateUrl" "Must use HTTPS" (httpFailToIcpFail (HttpInvalidUrl "IC requires HTTPS"))
       else ok Query "validateUrl" ("Valid: " ++ url) ()
 
 -- =============================================================================
