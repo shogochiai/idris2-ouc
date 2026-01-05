@@ -183,6 +183,28 @@ See [can.did](can.did) for the complete interface. Key methods:
 ## Dependencies
 
 - [idris2-cdk](https://github.com/shogochiai/idris2-cdk) - ICP canister development kit for Idris2
+- [idris2-wasm](https://github.com/shogochiai/idris2-wasm) - Reference implementation for Idris2→WASM→IC pipeline
+
+### Stack
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      idris2-ouc (this project)              │
+│               (OptimisticUpgraderCanister)                  │
+└─────────────────────────────────────────────────────────────┘
+                            │ uses
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│                      idris2-cdk                             │
+│   ICP.IC0 │ ICP.API │ ICP.Candid │ ICP.StableMemory        │
+└─────────────────────────────────────────────────────────────┘
+                            │ built on
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│                      idris2-wasm                            │
+│   Idris2 → RefC → Emscripten → WASM → WASI stub → IC       │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ## License
 
