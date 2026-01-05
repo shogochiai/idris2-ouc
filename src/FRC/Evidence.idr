@@ -9,7 +9,15 @@
 ||| - Cycles cost attribution
 module FRC.Evidence
 
+import Data.List
+
 %default total
+
+-- Local unlines implementation
+unlines : List String -> String
+unlines []        = ""
+unlines [x]       = x
+unlines (x :: xs) = x ++ "\n" ++ unlines xs
 
 -- =============================================================================
 -- Phase: Execution context boundaries for ICP canisters

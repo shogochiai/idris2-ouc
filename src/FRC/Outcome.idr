@@ -244,7 +244,7 @@ traverse f xs = sequence (map f xs)
 ||| For each element, apply function, collect results
 public export
 forM : List a -> (a -> FR b) -> FR (List b)
-forM = flip traverse
+forM = flip FRC.Outcome.traverse
 
 ||| Partition results into successes and failures
 public export

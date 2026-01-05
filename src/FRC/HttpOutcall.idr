@@ -15,8 +15,29 @@ import FRC.Conflict
 import FRC.Evidence
 import FRC.Outcome
 import FRC.Cycles
+import Data.String
+import Data.List
+import Data.Maybe
 
 %default total
+
+-- String helper functions using lambda syntax to avoid parser issues
+startsWith : String -> String -> Bool
+startsWith = \p, s => substr 0 (length p) s == p
+
+containsStr : String -> String -> Bool
+containsStr = \needle, haystack =>
+  let needleLen = length needle
+      haystackLen = length haystack
+  in go needleLen haystackLen haystack needle 0
+  where
+    go : Nat -> Nat -> String -> String -> Nat -> Bool
+    go needleLen haystackLen haystack needle i =
+      if i + needleLen > haystackLen
+        then False
+        else if substr i needleLen haystack == needle
+          then True
+          else assert_total $ go needleLen haystackLen haystack needle (S i)
 
 -- =============================================================================
 -- HTTP Method
@@ -139,14 +160,11 @@ validateRequest req = do
   -- Check URL is not empty
   guard HttpRequest "url" (length req.url > 0) (ValidationError "URL cannot be empty")
   -- Check URL starts with https (IC requires HTTPS)
-  guard HttpRequest "protocol" (isPrefixOf "https://" req.url || isPrefixOf "http://" req.url)
+  guard HttpRequest "protocol" (startsWith "https://" req.url || startsWith "http://" req.url)
         (ValidationError "URL must start with http:// or https://")
   -- Check max response is reasonable
   guard HttpRequest "maxResponse" (req.maxResponseBytes > 0 && req.maxResponseBytes <= 2000000)
         (ValidationError "maxResponseBytes must be between 1 and 2MB")
-  where
-    isPrefixOf : String -> String -> Bool
-    isPrefixOf prefix str = strSubstr 0 (cast $ length prefix) str == prefix
 
 ||| Parse HTTP response
 public export
@@ -263,22 +281,8 @@ getHeader name resp = map value (find (\h => h.name == name) resp.headers)
 public export
 hasContentType : String -> HttpResponse -> Bool
 hasContentType expected resp = case getHeader "Content-Type" resp of
-  Just ct => isInfixOf expected ct
+  Just ct => containsStr expected ct
   Nothing => False
-  where
-    isInfixOf : String -> String -> Bool
-    isInfixOf needle haystack = go 0
-      where
-        needleLen : Nat
-        needleLen = length needle
-        haystackLen : Nat
-        haystackLen = length haystack
-        go : Nat -> Bool
-        go i = if i + needleLen > haystackLen
-               then False
-               else if strSubstr (cast i) (cast needleLen) haystack == needle
-                    then True
-                    else go (S i)
 
 ||| Require JSON content type
 public export
@@ -288,7 +292,7 @@ requireJson resp =
     then Ok () (mkEvidence HttpRequest "requireJson" "JSON response")
     else Fail (DecodeError "Expected JSON content type")
               (mkEvidence HttpRequest "requireJson" $
-               "Got: " ++ fromMaybe "none" (getHeader "Content-Type" resp))
+               "Got: " ++ Data.Maybe.fromMaybe "none" (getHeader "Content-Type" resp))
 
 -- =============================================================================
 -- HTTP Evidence Recording

@@ -15,8 +15,21 @@ import FRC.Conflict
 import FRC.Evidence
 import FRC.Outcome
 import FRC.HttpOutcall
+import Data.List
+import Data.Maybe
 
 %default total
+
+-- Helper to convert Nat to hex string (using Integer for div/mod)
+showHex : Nat -> String
+showHex n = go (cast {to=Integer} n) []
+  where
+    hexDigit : Integer -> Char
+    hexDigit d = if d < 10 then chr (ord '0' + cast d) else chr (ord 'a' + cast d - 10)
+    go : Integer -> List Char -> String
+    go 0 [] = "0"
+    go 0 acc = pack acc
+    go k acc = assert_total $ go (k `div` 16) (hexDigit (k `mod` 16) :: acc)
 
 -- =============================================================================
 -- Chain Configuration
@@ -86,7 +99,7 @@ Show ChainConfig where
 ||| Get effective chain ID
 public export
 effectiveChainId : ChainConfig -> Nat
-effectiveChainId c = fromMaybe (chainId c.chainType) c.chainIdOverride
+effectiveChainId c = Data.Maybe.fromMaybe (chainId c.chainType) c.chainIdOverride
 
 -- =============================================================================
 -- Block and Transaction Types
@@ -108,16 +121,6 @@ Show BlockRef where
   show Pending         = "pending"
   show Safe            = "safe"
   show Finalized       = "finalized"
-  where
-    showHex : Nat -> String
-    showHex n = pack (go n [])
-      where
-        hexDigit : Nat -> Char
-        hexDigit d = if d < 10 then chr (ord '0' + cast d) else chr (ord 'a' + cast d - 10)
-        go : Nat -> List Char -> List Char
-        go 0 [] = ['0']
-        go 0 acc = acc
-        go n acc = go (n `div` 16) (hexDigit (n `mod` 16) :: acc)
 
 ||| Transaction hash (32 bytes as hex string)
 public export
@@ -305,7 +308,7 @@ Show ReorgEvent where
 public export
 mightBeAffected : Nat -> Nat -> TxStatus -> Bool
 mightBeAffected reorgDepth currentBlock status = case status of
-  TxIncluded b   => currentBlock - b < reorgDepth
+  TxIncluded b   => minus currentBlock b < reorgDepth
   TxConfirmed b c => c < reorgDepth
   _              => False
 
