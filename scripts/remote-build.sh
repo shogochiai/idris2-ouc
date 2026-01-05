@@ -4,14 +4,19 @@
 
 set -e
 
+# Load environment
+PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+if [ -f "$PROJECT_DIR/.env" ]; then
+    export $(grep -v '^#' "$PROJECT_DIR/.env" | xargs)
+fi
+
 # Configuration
 SERVER_NAME="idris2-build-$(date +%s)"
 SERVER_TYPE="ccx33"  # 8 vCPU, 32GB RAM
 IMAGE="ubuntu-22.04"
-LOCATION="fsn1"
-SSH_KEY_NAME="vastai_idr_1"  # Your SSH key name in Hetzner
-SSH_KEY_PATH="$HOME/.ssh/vastai_idr_1"
-PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+LOCATION="nbg1"  # Nuremberg (fallback: hel1, ash)
+SSH_KEY_NAME="${SSH_KEY_NAME:-vastai_idr_1}"
+SSH_KEY_PATH="${SSH_KEY_PATH:-$HOME/.ssh/vastai_idr_1}"
 BUILD_ARTIFACTS="build"
 
 echo "=== Idris2 OUC Remote Build ==="

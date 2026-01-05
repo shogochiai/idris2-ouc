@@ -33,7 +33,7 @@ logs/
 id_rsa*
 *.pub
 
-# Environment
+# Environment (contains HCLOUD_TOKEN)
 .env
 .env.*
 *.secret
