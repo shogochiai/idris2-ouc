@@ -9,6 +9,7 @@ modules = Util.StringHex
         , Util.StringCase
         , FRC.Core
         , OUC.Core
+        , OUC.Signatures
         , OUC.MultiSig
         , OUC.Relay
         , AuditorPool.Core
@@ -16,6 +17,9 @@ modules = Util.StringHex
         , Proposals.Core
         , HttpOutcall.Core
         , HttpOutcall.EvmRpc
+        , HttpOutcall.TxSender.Types
+        , HttpOutcall.TxSender.Abi
+        , HttpOutcall.TxSender.Send
         , HttpOutcall.TxSender
         , ERC7546.Dictionary
         , ERC7546.Upgrade
