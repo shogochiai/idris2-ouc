@@ -1,242 +1,155 @@
 ||| Failure-Recovery Calculus Core Types for ICP
 |||
-||| This module defines the fundamental FRC types adapted for ICP canister development.
+||| This module re-exports all FRC submodules for convenient import.
 ||| Based on the FRC paper: "Failure-Recovery Calculus for World-Computer Virtual Machines"
 |||
-||| Key principles:
-||| - Classify failures instead of hiding them
+||| Key principles (Karma Monad):
+||| - Classify failures instead of hiding them (no "Unknown" failures)
 ||| - Force observability (evidence always present)
 ||| - Localize blast radius (explicit boundaries)
 ||| - Require recovery procedures
+|||
+||| Module structure:
+||| - FRC.Conflict   : Failure classification with severity and category
+||| - FRC.Evidence   : Observable data for diagnosis and replay
+||| - FRC.Outcome    : FR monad with recovery-aware combinators
+||| - FRC.Cycles     : ICP cycles (resource) management
+||| - FRC.Upgrade    : Canister upgrade and migration patterns
+||| - FRC.HttpOutcall: HTTP outcall patterns
+||| - FRC.Chain      : Blockchain interaction patterns
+|||
+||| Usage:
+|||   import FRC.Core  -- Get everything
+|||   -- or import specific modules:
+|||   import FRC.Outcome
+|||   import FRC.Conflict
 module FRC.Core
+
+-- Re-export all submodules
+import public FRC.Conflict
+import public FRC.Evidence
+import public FRC.Outcome
+import public FRC.Cycles
+import public FRC.Upgrade
+import public FRC.HttpOutcall
+import public FRC.Chain
 
 %default total
 
 -- =============================================================================
--- Phase: Execution context boundaries for ICP canisters
+-- Convenient type aliases
 -- =============================================================================
 
-||| ICP canister lifecycle phases
-||| Each phase represents a distinct execution boundary with different capabilities
-public export
-data Phase
-  = Init           -- Canister initialization
-  | PreUpgrade     -- Before upgrade (save state)
-  | PostUpgrade    -- After upgrade (restore state)
-  | Update         -- State-modifying call
-  | Query          -- Read-only call
-  | Heartbeat      -- Periodic execution
-  | Inspect        -- Message inspection
-  | Timer          -- Timer callback
-  | HttpRequest    -- HTTP outcall context
+||| Standard failure type (re-exported from Conflict)
+-- IcpFail is already exported from FRC.Conflict
 
-public export
-Show Phase where
-  show Init        = "Init"
-  show PreUpgrade  = "PreUpgrade"
-  show PostUpgrade = "PostUpgrade"
-  show Update      = "Update"
-  show Query       = "Query"
-  show Heartbeat   = "Heartbeat"
-  show Inspect     = "Inspect"
-  show Timer       = "Timer"
-  show HttpRequest = "HttpRequest"
+||| Standard evidence type (re-exported from Evidence)
+-- Evidence is already exported from FRC.Evidence
+
+||| Standard FR monad (re-exported from Outcome)
+-- FR is already exported from FRC.Outcome
 
 -- =============================================================================
--- Failure Surface: Classified failures for ICP
+-- Common patterns
 -- =============================================================================
 
-||| ICP-specific failure classifications
-||| These form a closed sum type - no "Unknown" failures allowed
+||| Run FR computation and convert to text response (for canister interface)
 public export
-data IcpFail
-  = Trap String                         -- ic0.trap equivalent
-  | Reject Int String                   -- Canister rejection (code, message)
-  | SysInvariant String                 -- System invariant violation
-  | DecodeError String                  -- Candid/data decoding failure
-  | EncodeError String                  -- Candid/data encoding failure
-  | StableMemError String               -- Stable memory operation failure
-  | CallError String                    -- Inter-canister call failure
-  | Unauthorized String                 -- Permission/auth failure
-  | Conflict String                     -- Optimistic concurrency conflict
-  | NotFound String                     -- Resource not found
-  | InvalidState String                 -- State machine violation
-  | RateLimited String                  -- Rate/resource limit exceeded
-  | Timeout String                      -- Operation timeout
-  | Internal String                     -- Internal error (last resort)
+runFRToText : Show a => FR a -> String
+runFRToText (Ok v e)   = "OK: " ++ show v
+runFRToText (Fail f e) = "ERROR: " ++ show f ++ "\n" ++ renderEvidence e
 
+||| Run FR computation returning JSON-like response
 public export
-Show IcpFail where
-  show (Trap s)          = "Trap: " ++ s
-  show (Reject c m)      = "Reject(" ++ show c ++ "): " ++ m
-  show (SysInvariant s)  = "SysInvariant: " ++ s
-  show (DecodeError s)   = "DecodeError: " ++ s
-  show (EncodeError s)   = "EncodeError: " ++ s
-  show (StableMemError s)= "StableMemError: " ++ s
-  show (CallError s)     = "CallError: " ++ s
-  show (Unauthorized s)  = "Unauthorized: " ++ s
-  show (Conflict s)      = "Conflict: " ++ s
-  show (NotFound s)      = "NotFound: " ++ s
-  show (InvalidState s)  = "InvalidState: " ++ s
-  show (RateLimited s)   = "RateLimited: " ++ s
-  show (Timeout s)       = "Timeout: " ++ s
-  show (Internal s)      = "Internal: " ++ s
+runFRToJson : Show a => FR a -> String
+runFRToJson (Ok v e) =
+  "{\"status\":\"ok\",\"value\":" ++ show v ++
+  ",\"evidence\":{\"phase\":\"" ++ show e.phase ++ "\",\"label\":\"" ++ e.label ++ "\"}}"
+runFRToJson (Fail f e) =
+  "{\"status\":\"error\",\"error\":\"" ++ show f ++
+  "\",\"severity\":\"" ++ show (severity f) ++
+  "\",\"category\":\"" ++ show (category f) ++ "\"}"
 
 -- =============================================================================
--- Evidence: Mandatory observability for diagnosis and replay
+-- ICP-specific entry point helpers
 -- =============================================================================
 
-||| Evidence record - captures context for diagnosis
-||| Every FR result must carry evidence regardless of success/failure
+||| Wrap a query operation with proper evidence
 public export
-record Evidence where
-  constructor MkEvidence
-  phase     : Phase      -- Execution phase
-  label     : String     -- Operation identifier
-  detail    : String     -- Additional context
-  timestamp : Nat        -- IC time (nanoseconds)
-  caller    : String     -- Principal or empty
+queryOp : String -> FR a -> FR a
+queryOp label = inPhase Query . tag ("query:" ++ label)
 
+||| Wrap an update operation with proper evidence
 public export
-Show Evidence where
-  show e = "[" ++ show e.phase ++ "] " ++ e.label ++ ": " ++ e.detail
+updateOp : String -> FR a -> FR a
+updateOp label = inPhase Update . tag ("update:" ++ label)
 
-||| Empty evidence for pure operations
+||| Wrap an init operation with proper evidence
 public export
-emptyEvidence : Evidence
-emptyEvidence = MkEvidence Query "" "" 0 ""
-
-||| Combine evidence (monoid operation)
-public export
-combineEvidence : Evidence -> Evidence -> Evidence
-combineEvidence e1 e2 = MkEvidence
-  e2.phase
-  (e1.label ++ " -> " ++ e2.label)
-  (e1.detail ++ "; " ++ e2.detail)
-  e2.timestamp
-  e2.caller
+initOp : String -> FR a -> FR a
+initOp label = inPhase Init . tag ("init:" ++ label)
 
 -- =============================================================================
--- FR: The Failure-Recovery Result Type
+-- Error response encoding
 -- =============================================================================
 
-||| Failure-Recovery result type
-||| All computations return either success with evidence or failure with evidence
+||| Convert IcpFail to reject code (for IC reject)
+||| Maps failure categories to IC reject codes:
+||| - 1: SYS_FATAL
+||| - 2: SYS_TRANSIENT
+||| - 3: DESTINATION_INVALID
+||| - 4: CANISTER_REJECT
+||| - 5: CANISTER_ERROR
 public export
-data FR : Type -> Type where
-  Ok   : (value : a) -> (evidence : Evidence) -> FR a
-  Fail : (failure : IcpFail) -> (evidence : Evidence) -> FR a
+toRejectCode : IcpFail -> Int
+toRejectCode f = case category f of
+  SecurityConflict  => 4   -- CANISTER_REJECT
+  StateConflict     => 5   -- CANISTER_ERROR
+  ResourceConflict  => 2   -- SYS_TRANSIENT (might recover with more cycles)
+  ExecutionConflict => 5   -- CANISTER_ERROR
+  NetworkConflict   => 2   -- SYS_TRANSIENT (might recover)
+  EncodingConflict  => 4   -- CANISTER_REJECT
+  PolicyConflict    => 4   -- CANISTER_REJECT
+  UpgradeConflict   => 1   -- SYS_FATAL
 
+||| Convert FR failure to (code, message) for IC reject
 public export
-Show a => Show (FR a) where
-  show (Ok v e)   = "Ok(" ++ show v ++ ") " ++ show e
-  show (Fail f e) = "Fail(" ++ show f ++ ") " ++ show e
-
-||| Check if result is success
-public export
-isOk : FR a -> Bool
-isOk (Ok _ _)   = True
-isOk (Fail _ _) = False
-
-||| Check if result is failure
-public export
-isFail : FR a -> Bool
-isFail = not . isOk
-
-||| Extract value or default
-public export
-fromOk : a -> FR a -> a
-fromOk _ (Ok v _)   = v
-fromOk d (Fail _ _) = d
-
-||| Extract evidence
-public export
-getEvidence : FR a -> Evidence
-getEvidence (Ok _ e)   = e
-getEvidence (Fail _ e) = e
+toReject : IcpFail -> (Int, String)
+toReject f = (toRejectCode f, show f)
 
 -- =============================================================================
--- Functor, Applicative, Monad instances for FR
+-- Composable guards
 -- =============================================================================
 
+||| Require caller to be owner
 public export
-Functor FR where
-  map f (Ok v e)   = Ok (f v) e
-  map f (Fail x e) = Fail x e
+requireOwner : Phase -> String -> String -> String -> FR ()
+requireOwner phase op expected actual = do
+  guard phase op (expected == actual)
+        (Unauthorized $ "Caller " ++ actual ++ " is not owner " ++ expected)
+  tag "owner-check" (pure ())
 
+||| Require valid proposal ID
 public export
-Applicative FR where
-  pure v = Ok v emptyEvidence
-  (Ok f e1) <*> (Ok v e2)   = Ok (f v) (combineEvidence e1 e2)
-  (Ok _ e1) <*> (Fail x e2) = Fail x (combineEvidence e1 e2)
-  (Fail x e) <*> _          = Fail x e
+requireValidId : Phase -> String -> Nat -> Nat -> FR ()
+requireValidId phase op id maxId = do
+  guard phase op (id > 0 && id <= maxId)
+        (NotFound $ "Invalid ID " ++ show id ++ " (max: " ++ show maxId ++ ")")
+  tag "id-check" (pure ())
 
+||| Require non-empty string
 public export
-Monad FR where
-  (Ok v e1) >>= f = case f v of
-    Ok v' e2   => Ok v' (combineEvidence e1 e2)
-    Fail x e2  => Fail x (combineEvidence e1 e2)
-  (Fail x e) >>= _ = Fail x e
+requireNonEmpty : Phase -> String -> String -> String -> FR ()
+requireNonEmpty phase op name value = do
+  guard phase op (length value > 0)
+        (ValidationError $ name ++ " cannot be empty")
+  tag "non-empty-check" (pure ())
 
 -- =============================================================================
--- Smart Constructors with Evidence
+-- Version info
 -- =============================================================================
 
-||| Create success result with evidence
+||| FRC module version
 public export
-ok : Phase -> String -> String -> a -> FR a
-ok phase label detail value = Ok value (MkEvidence phase label detail 0 "")
-
-||| Create failure result with evidence
-public export
-fail : Phase -> String -> String -> IcpFail -> FR a
-fail phase label detail failure = Fail failure (MkEvidence phase label detail 0 "")
-
-||| Create conflict failure (common in optimistic upgrader)
-public export
-conflict : Phase -> String -> String -> FR a
-conflict phase label detail = fail phase label detail (Conflict detail)
-
-||| Create unauthorized failure
-public export
-unauthorized : Phase -> String -> String -> FR a
-unauthorized phase label detail = fail phase label detail (Unauthorized detail)
-
-||| Create not found failure
-public export
-notFound : Phase -> String -> String -> FR a
-notFound phase label detail = fail phase label detail (NotFound detail)
-
--- =============================================================================
--- Boundary Functions: Recovery closure enforcement
--- =============================================================================
-
-||| Handler type: transforms failures into recovery actions
-public export
-Handler : Type -> Type -> Type
-Handler a b = (IcpFail, Evidence) -> FR b
-
-||| Apply handler to failure, pass through success
-public export
-handleWith : Handler a a -> FR a -> FR a
-handleWith _ (Ok v e)      = Ok v e
-handleWith h (Fail f e)    = h (f, e)
-
-||| Boundary function: enforce recovery closure at phase boundary
-||| Failures that escape the boundary are converted to trap/reject
-public export
-boundary : Phase -> FR a -> Either (IcpFail, Evidence) (a, Evidence)
-boundary _ (Ok v e)   = Right (v, e)
-boundary _ (Fail f e) = Left (f, e)
-
-||| Map FR result, preserving evidence on success
-public export
-mapOk : (a -> b) -> FR a -> FR b
-mapOk f (Ok v e)   = Ok (f v) e
-mapOk _ (Fail x e) = Fail x e
-
-||| Catch specific failure type and attempt recovery
-public export
-catchFail : (IcpFail -> Bool) -> (IcpFail -> Evidence -> FR a) -> FR a -> FR a
-catchFail pred recover (Fail f e) = if pred f then recover f e else Fail f e
-catchFail _ _ ok = ok
+frcVersion : Version
+frcVersion = MkVersion 1 0 0

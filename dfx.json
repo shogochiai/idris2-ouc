@@ -2,15 +2,11 @@
   "version": 1,
   "dfx": "0.15.0",
   "canisters": {
-    "optimistic_upgrader_canister": {
+    "ouc": {
       "type": "custom",
       "candid": "can.did",
-      "wasm": "build/ouc.wasm",
-      "build": [
-        "idris2 --build ouc.ipkg",
-        "mkdir -p build",
-        "mv build/exec/ouc.wasm build/ouc.wasm"
-      ],
+      "wasm": "build/ouc_stubbed.wasm",
+      "build": ["./scripts/build-canister.sh"],
       "declarations": {
         "node_compatibility": true
       }
@@ -25,7 +21,7 @@
   "output_env_file": ".env",
   "networks": {
     "local": {
-      "bind": "127.0.0.1:8080",
+      "bind": "127.0.0.1:4943",
       "type": "ephemeral",
       "replica": {
         "subnet_type": "system"
