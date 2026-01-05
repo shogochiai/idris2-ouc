@@ -1,0 +1,120 @@
+# Rewards Module Specification
+# Fee collection and reward distribution for auditors
+
+[definitions]
+prefix = "REW"
+
+[[spec_area]]
+name = "Fee Collection"
+
+[[spec]]
+id = "${prefix}_FEE_001"
+title = "Fee collection requires minimum amount"
+invariant = "collectFee fails with Unauthorized if amount < proposalFee"
+
+[[spec]]
+id = "${prefix}_FEE_002"
+title = "Treasury share deposited immediately"
+invariant = "Treasury balance increases by (fee * treasuryShare / 100)"
+
+[[spec]]
+id = "${prefix}_FEE_003"
+title = "Total collected tracked accurately"
+invariant = "totalCollected += amount on each collectFee"
+
+[[spec]]
+id = "${prefix}_FEE_004"
+title = "Fee record created with evidence"
+invariant = "FeeCollection includes proposalId, payer, amount, timestamp"
+
+[[spec_area]]
+name = "Reward Calculation"
+
+[[spec]]
+id = "${prefix}_CALC_001"
+title = "Base reward is auditorRewardShare of fee"
+invariant = "baseReward = (fee * auditorRewardShare) / 100"
+
+[[spec]]
+id = "${prefix}_CALC_002"
+title = "Quality bonus added for high quality reviews"
+invariant = "highQuality => reward += qualityBonus"
+
+[[spec]]
+id = "${prefix}_CALC_003"
+title = "Speed bonus added for fast turnaround"
+invariant = "fast => reward += speedBonus"
+
+[[spec]]
+id = "${prefix}_CALC_004"
+title = "Treasury deposit is treasuryShare of fee"
+invariant = "treasuryDeposit = (fee * treasuryShare) / 100"
+
+[[spec_area]]
+name = "Reward Queue"
+
+[[spec]]
+id = "${prefix}_QUEUE_001"
+title = "Reward requires prior fee collection"
+invariant = "queueReward returns NotFound if no fee for proposalId"
+
+[[spec]]
+id = "${prefix}_QUEUE_002"
+title = "Queued rewards tracked in pendingRewards"
+invariant = "queueReward adds (auditorId, amount, proposalId) to pending"
+
+[[spec]]
+id = "${prefix}_QUEUE_003"
+title = "Same auditor can have multiple pending rewards"
+invariant = "pendingRewards is a list, not a map"
+
+[[spec_area]]
+name = "Reward Distribution"
+
+[[spec]]
+id = "${prefix}_DIST_001"
+title = "Distribution requires pending reward"
+invariant = "distributeReward returns NotFound if no pending entry"
+
+[[spec]]
+id = "${prefix}_DIST_002"
+title = "Distribution requires sufficient treasury balance"
+invariant = "distributeReward fails with InvalidState if balance < amount"
+
+[[spec]]
+id = "${prefix}_DIST_003"
+title = "Treasury balance decreases on distribution"
+invariant = "treasury.balance -= amount after successful distribution"
+
+[[spec]]
+id = "${prefix}_DIST_004"
+title = "Total distributed tracked accurately"
+invariant = "totalDistributed += amount on each distribution"
+
+[[spec]]
+id = "${prefix}_DIST_005"
+title = "Distribution record includes txRef evidence"
+invariant = "RewardDistribution.txRef is non-empty after distribution"
+
+[[spec]]
+id = "${prefix}_DIST_006"
+title = "Pending reward removed after distribution"
+invariant = "distributeReward removes entry from pendingRewards"
+
+[[spec_area]]
+name = "Queries"
+
+[[spec]]
+id = "${prefix}_QUERY_001"
+title = "getPendingReward sums all pending for auditor"
+invariant = "Returns sum of amounts where auditorId matches"
+
+[[spec]]
+id = "${prefix}_QUERY_002"
+title = "getTotalDistributed sums all distributions for auditor"
+invariant = "Returns sum of amounts from distributions list"
+
+[[spec]]
+id = "${prefix}_QUERY_003"
+title = "Queries return FR with evidence"
+invariant = "All query functions return FR type with Query phase"

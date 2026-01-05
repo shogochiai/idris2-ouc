@@ -1,0 +1,200 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://lazy.dev/schemas/evidence.json",
+  "title": "FRC Evidence Schema",
+  "description": "Evidence schema for Failure-Recovery Calculus compliance. Every FR result carries evidence regardless of success or failure.",
+
+  "definitions": {
+    "Phase": {
+      "type": "string",
+      "enum": ["Init", "PreUpgrade", "PostUpgrade", "Update", "Query", "Heartbeat", "Inspect", "Timer", "HttpRequest"],
+      "description": "ICP canister lifecycle phase where the operation occurred"
+    },
+
+    "IcpFailType": {
+      "type": "string",
+      "enum": [
+        "Trap", "Reject", "SysInvariant", "DecodeError", "EncodeError",
+        "StableMemError", "CallError", "Unauthorized", "Conflict",
+        "NotFound", "InvalidState", "RateLimited", "Timeout", "Internal"
+      ],
+      "description": "Classified failure type - no Unknown allowed"
+    },
+
+    "BaseEvidence": {
+      "type": "object",
+      "required": ["phase", "label", "timestamp"],
+      "properties": {
+        "phase": { "$ref": "#/definitions/Phase" },
+        "label": {
+          "type": "string",
+          "description": "Operation identifier (function name)"
+        },
+        "detail": {
+          "type": "string",
+          "description": "Human-readable context"
+        },
+        "timestamp": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "IC time in nanoseconds"
+        },
+        "caller": {
+          "type": "string",
+          "description": "Principal of caller (empty for anonymous)"
+        }
+      }
+    },
+
+    "EvmEvidence": {
+      "type": "object",
+      "description": "Evidence specific to EVM chain interactions",
+      "required": ["chainId"],
+      "properties": {
+        "chainId": {
+          "type": "integer",
+          "description": "EVM chain ID"
+        },
+        "txHash": {
+          "type": "string",
+          "pattern": "^0x[a-fA-F0-9]{64}$",
+          "description": "Transaction hash"
+        },
+        "blockNumber": {
+          "type": "integer",
+          "description": "Block number where tx was included"
+        },
+        "contractAddress": {
+          "type": "string",
+          "pattern": "^0x[a-fA-F0-9]{40}$",
+          "description": "Contract address involved"
+        },
+        "gasUsed": {
+          "type": "integer",
+          "description": "Gas consumed"
+        },
+        "revertReason": {
+          "type": "string",
+          "description": "Decoded revert reason if reverted"
+        }
+      }
+    },
+
+    "ProposalEvidence": {
+      "type": "object",
+      "description": "Evidence for upgrade proposal operations",
+      "required": ["proposalId"],
+      "properties": {
+        "proposalId": {
+          "type": "integer",
+          "description": "Unique proposal identifier"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["Pending", "UnderReview", "Approved", "Rejected", "Executed", "Expired", "Cancelled"]
+        },
+        "previousStatus": {
+          "type": "string",
+          "description": "Status before transition"
+        },
+        "auditorId": {
+          "type": "string",
+          "description": "Assigned auditor principal"
+        },
+        "reviewDecision": {
+          "type": "string",
+          "enum": ["ApproveUpgrade", "RejectUpgrade", "RequestChanges"]
+        }
+      }
+    },
+
+    "RewardEvidence": {
+      "type": "object",
+      "description": "Evidence for reward distribution operations",
+      "properties": {
+        "auditorId": {
+          "type": "string",
+          "description": "Recipient auditor principal"
+        },
+        "amount": {
+          "type": "integer",
+          "description": "Token amount distributed"
+        },
+        "proposalId": {
+          "type": "integer",
+          "description": "Related proposal"
+        },
+        "treasuryBalance": {
+          "type": "integer",
+          "description": "Treasury balance after operation"
+        }
+      }
+    }
+  },
+
+  "type": "object",
+  "required": ["version", "base", "result"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Schema version"
+    },
+
+    "base": {
+      "$ref": "#/definitions/BaseEvidence",
+      "description": "Core evidence present in all FR results"
+    },
+
+    "result": {
+      "type": "object",
+      "required": ["type"],
+      "oneOf": [
+        {
+          "properties": {
+            "type": { "const": "Ok" },
+            "value": {
+              "description": "Operation result value (type depends on operation)"
+            }
+          },
+          "required": ["type", "value"]
+        },
+        {
+          "properties": {
+            "type": { "const": "Fail" },
+            "failType": { "$ref": "#/definitions/IcpFailType" },
+            "message": {
+              "type": "string",
+              "description": "Failure message"
+            }
+          },
+          "required": ["type", "failType", "message"]
+        }
+      ]
+    },
+
+    "evm": {
+      "$ref": "#/definitions/EvmEvidence",
+      "description": "EVM-specific evidence (if applicable)"
+    },
+
+    "proposal": {
+      "$ref": "#/definitions/ProposalEvidence",
+      "description": "Proposal-specific evidence (if applicable)"
+    },
+
+    "reward": {
+      "$ref": "#/definitions/RewardEvidence",
+      "description": "Reward-specific evidence (if applicable)"
+    },
+
+    "combined": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "description": "Evidence from composed operations"
+      },
+      "description": "Evidence chain from monadic composition"
+    }
+  }
+}

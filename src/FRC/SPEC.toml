@@ -1,0 +1,67 @@
+# FRC Core Module Specification
+# Failure-Recovery Calculus types for ICP canister development
+
+[definitions]
+prefix = "FRC"
+
+[[spec_area]]
+name = "Core Types"
+
+[[spec]]
+id = "${prefix}_TYPE_001"
+title = "Phase enumeration covers all ICP lifecycle phases"
+invariant = "Phase is a closed sum type with no Unknown variant"
+
+[[spec]]
+id = "${prefix}_TYPE_002"
+title = "IcpFail enumeration covers all classified failure modes"
+invariant = "IcpFail is a closed sum type - Unknown failures are forbidden"
+
+[[spec]]
+id = "${prefix}_TYPE_003"
+title = "Evidence always carries Phase, label, detail"
+invariant = "Every FR result has observable evidence regardless of success/failure"
+
+[[spec_area]]
+name = "Monadic Laws"
+
+[[spec]]
+id = "${prefix}_MONAD_001"
+title = "Left identity: pure x >>= f === f x"
+invariant = "Recovery structure preserved under left identity"
+
+[[spec]]
+id = "${prefix}_MONAD_002"
+title = "Right identity: m >>= pure === m"
+invariant = "Recovery structure preserved under right identity"
+
+[[spec]]
+id = "${prefix}_MONAD_003"
+title = "Associativity: (m >>= f) >>= g === m >>= (\\x -> f x >>= g)"
+invariant = "Recovery structure preserved under composition"
+
+[[spec_area]]
+name = "Evidence Composition"
+
+[[spec]]
+id = "${prefix}_EVID_001"
+title = "Evidence combination is associative"
+invariant = "combineEvidence is associative with emptyEvidence as identity"
+
+[[spec]]
+id = "${prefix}_EVID_002"
+title = "Evidence preserved through bind"
+invariant = "Monadic bind accumulates evidence from both operands"
+
+[[spec_area]]
+name = "Recovery Closure"
+
+[[spec]]
+id = "${prefix}_RECOV_001"
+title = "Boundary function classifies all results"
+invariant = "boundary returns Left for failures, Right for success - no exceptions"
+
+[[spec]]
+id = "${prefix}_RECOV_002"
+title = "Handler application preserves evidence"
+invariant = "handleWith preserves or augments evidence, never discards"

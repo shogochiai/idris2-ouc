@@ -1,0 +1,185 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://lazy.dev/schemas/proposal_payload.json",
+  "title": "Upgrade Proposal Payload Schema",
+  "description": "Schema for upgrade proposals sent from LazyEvmLifecycle to OUC. This payload can be serialized to both Candid (for ICP) and JSON-RPC (for EVM).",
+
+  "definitions": {
+    "EvmAddress": {
+      "type": "string",
+      "pattern": "^0x[a-fA-F0-9]{40}$",
+      "description": "20-byte Ethereum address"
+    },
+
+    "Principal": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+$",
+      "description": "ICP Principal identifier"
+    },
+
+    "Bytes32": {
+      "type": "string",
+      "pattern": "^0x[a-fA-F0-9]{64}$",
+      "description": "32-byte hash"
+    },
+
+    "ChainConfig": {
+      "type": "object",
+      "required": ["chainId", "name", "oufAddress", "rpcUrl"],
+      "properties": {
+        "chainId": {
+          "type": "integer",
+          "description": "EVM chain ID"
+        },
+        "name": {
+          "type": "string",
+          "description": "Human-readable chain name"
+        },
+        "oufAddress": {
+          "$ref": "#/definitions/EvmAddress",
+          "description": "OptimisticUpgraderFactory address on this chain"
+        },
+        "oucAddress": {
+          "$ref": "#/definitions/EvmAddress",
+          "description": "OUC's representation on this chain"
+        },
+        "rpcUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "RPC endpoint URL"
+        },
+        "isActive": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether chain is currently active"
+        }
+      }
+    }
+  },
+
+  "type": "object",
+  "required": ["chainId", "target", "newImpl", "ou", "proposer", "rationale", "codeHash"],
+  "properties": {
+    "chainId": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Target EVM chain ID"
+    },
+
+    "target": {
+      "$ref": "#/definitions/EvmAddress",
+      "description": "ERC-7546 Proxy contract to upgrade"
+    },
+
+    "newImpl": {
+      "$ref": "#/definitions/EvmAddress",
+      "description": "New implementation contract address"
+    },
+
+    "ou": {
+      "$ref": "#/definitions/EvmAddress",
+      "description": "OptimisticUpgrader contract that will execute the upgrade"
+    },
+
+    "proposer": {
+      "$ref": "#/definitions/Principal",
+      "description": "ICP principal of proposal submitter"
+    },
+
+    "rationale": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 10000,
+      "description": "Human-readable justification for the upgrade"
+    },
+
+    "codeHash": {
+      "$ref": "#/definitions/Bytes32",
+      "description": "Keccak256 hash of new implementation bytecode"
+    },
+
+    "sourceEvidence": {
+      "type": "object",
+      "description": "Evidence from LazyEvmLifecycle that generated this proposal",
+      "properties": {
+        "lifecycleVersion": {
+          "type": "string",
+          "description": "LazyEvmLifecycle version"
+        },
+        "askTimestamp": {
+          "type": "integer",
+          "description": "Timestamp when lazy evm-lifecycle ask was run"
+        },
+        "gapDetected": {
+          "type": "string",
+          "description": "Description of gap that triggered upgrade recommendation"
+        },
+        "scriptHash": {
+          "$ref": "#/definitions/Bytes32",
+          "description": "Hash of the generated cast script"
+        },
+        "previousImplHash": {
+          "$ref": "#/definitions/Bytes32",
+          "description": "Hash of current implementation being upgraded from"
+        }
+      }
+    },
+
+    "deadline": {
+      "type": "integer",
+      "description": "Unix timestamp after which proposal expires"
+    },
+
+    "fee": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Fee paid for proposal submission (in smallest token unit)"
+    },
+
+    "metadata": {
+      "type": "object",
+      "description": "Additional metadata",
+      "properties": {
+        "gitCommit": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$",
+          "description": "Git commit hash of new implementation source"
+        },
+        "auditReportUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL to audit report (if available)"
+        },
+        "testCoverage": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Test coverage percentage"
+        },
+        "specParity": {
+          "type": "boolean",
+          "description": "Whether spec-test-impl parity is maintained"
+        }
+      }
+    }
+  },
+
+  "examples": [
+    {
+      "chainId": 1,
+      "target": "0x1234567890123456789012345678901234567890",
+      "newImpl": "0xabcdef0123456789abcdef0123456789abcdef01",
+      "ou": "0xfedcba9876543210fedcba9876543210fedcba98",
+      "proposer": "2vxsx-fae",
+      "rationale": "Security fix for reentrancy vulnerability in withdraw function",
+      "codeHash": "0x1234567890123456789012345678901234567890123456789012345678901234",
+      "sourceEvidence": {
+        "lifecycleVersion": "0.1.0",
+        "askTimestamp": 1704067200000000000,
+        "gapDetected": "SPEC_SEC_001: Reentrancy guard missing"
+      },
+      "deadline": 1704672000,
+      "fee": 100
+    }
+  ]
+}

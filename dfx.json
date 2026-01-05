@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "dfx": "0.15.0",
+  "canisters": {
+    "optimistic_upgrader_canister": {
+      "type": "custom",
+      "candid": "can.did",
+      "wasm": "build/ouc.wasm",
+      "build": [
+        "idris2 --build ouc.ipkg",
+        "mkdir -p build",
+        "mv build/exec/ouc.wasm build/ouc.wasm"
+      ],
+      "declarations": {
+        "node_compatibility": true
+      }
+    }
+  },
+  "defaults": {
+    "build": {
+      "args": "",
+      "packtool": ""
+    }
+  },
+  "output_env_file": ".env",
+  "networks": {
+    "local": {
+      "bind": "127.0.0.1:8080",
+      "type": "ephemeral",
+      "replica": {
+        "subnet_type": "system"
+      }
+    },
+    "ic": {
+      "providers": ["https://ic0.app"],
+      "type": "persistent"
+    }
+  }
+}

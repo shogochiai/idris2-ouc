@@ -1,0 +1,343 @@
+// =============================================================================
+// OptimisticUpgraderCanister (OUC) Candid Interface
+// =============================================================================
+//
+// This interface defines the public API for the OUC canister.
+// The OUC coordinates upgrade proposals across EVM chains, managing:
+// - Proposal submission and lifecycle
+// - Auditor pool and assignment
+// - Reward distribution
+// - Cross-chain execution authorization
+//
+// All operations return FRC-compliant results with evidence.
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// Core Types
+// -----------------------------------------------------------------------------
+
+type ChainId = nat;
+type EvmAddress = text;
+type Principal_ = principal;
+type Timestamp = nat;
+type TokenAmount = nat;
+
+// Proposal identifier
+type ProposalId = nat;
+
+// Auditor identifier
+type AuditorId = principal;
+
+// -----------------------------------------------------------------------------
+// Proposal Types
+// -----------------------------------------------------------------------------
+
+type ProposalStatus = variant {
+    Pending;
+    UnderReview;
+    Approved;
+    Rejected;
+    Executed;
+    Expired;
+    Cancelled;
+};
+
+type UpgradeProposal = record {
+    id: ProposalId;
+    chainId: ChainId;
+    target: EvmAddress;
+    newImpl: EvmAddress;
+    ou: EvmAddress;
+    proposer: Principal_;
+    rationale: text;
+    codeHash: text;
+    status: ProposalStatus;
+    createdAt: Timestamp;
+    updatedAt: Timestamp;
+    expiresAt: Timestamp;
+};
+
+type SubmitProposalArgs = record {
+    chainId: ChainId;
+    target: EvmAddress;
+    newImpl: EvmAddress;
+    ou: EvmAddress;
+    rationale: text;
+    codeHash: text;
+    sourceEvidence: text;
+    fee: TokenAmount;
+};
+
+type ProposalReceipt = record {
+    proposalId: ProposalId;
+    receivedAt: Timestamp;
+    sourceEvidence: text;
+};
+
+// -----------------------------------------------------------------------------
+// Auditor Types
+// -----------------------------------------------------------------------------
+
+type AuditorStatus = variant {
+    Active;
+    Suspended;
+    Slashed;
+    Inactive;
+};
+
+type Auditor = record {
+    id: AuditorId;
+    status: AuditorStatus;
+    reputation: nat;
+    totalReviews: nat;
+    approvedCount: nat;
+    rejectedCount: nat;
+    slashCount: nat;
+    stakedAmount: TokenAmount;
+    registeredAt: Timestamp;
+};
+
+type RegisterAuditorArgs = record {
+    stakeAmount: TokenAmount;
+};
+
+// -----------------------------------------------------------------------------
+// Review Types
+// -----------------------------------------------------------------------------
+
+type ReviewDecision = variant {
+    ApproveUpgrade;
+    RejectUpgrade: text;
+    RequestChanges: text;
+};
+
+type Review = record {
+    proposalId: ProposalId;
+    auditorId: AuditorId;
+    decision: ReviewDecision;
+    comment: text;
+    timestamp: Timestamp;
+    signature: text;
+};
+
+type SubmitReviewArgs = record {
+    proposalId: ProposalId;
+    decision: ReviewDecision;
+    comment: text;
+    signature: text;
+};
+
+// -----------------------------------------------------------------------------
+// Reward Types
+// -----------------------------------------------------------------------------
+
+type RewardDistribution = record {
+    recipientId: AuditorId;
+    proposalId: ProposalId;
+    amount: TokenAmount;
+    reason: text;
+    distributedAt: Timestamp;
+    txRef: text;
+};
+
+// -----------------------------------------------------------------------------
+// Execution Types
+// -----------------------------------------------------------------------------
+
+type ExecutionRequest = record {
+    proposalId: ProposalId;
+    chainId: ChainId;
+    target: EvmAddress;
+    calldata: text;
+    signature: text;
+    deadline: Timestamp;
+};
+
+type ExecutionResult = variant {
+    Success: text;  // txHash
+    Reverted: text; // reason
+    Timeout;
+    RpcError: record { code: int32; message: text };
+};
+
+type RecordExecutionArgs = record {
+    proposalId: ProposalId;
+    result: ExecutionResult;
+};
+
+// -----------------------------------------------------------------------------
+// Evidence Types (FRC Compliance)
+// -----------------------------------------------------------------------------
+
+type Phase = variant {
+    Init;
+    PreUpgrade;
+    PostUpgrade;
+    Update;
+    Query_;
+    Heartbeat;
+    Inspect;
+    Timer;
+    HttpRequest;
+};
+
+type Evidence = record {
+    phase: Phase;
+    label: text;
+    detail: text;
+    timestamp: Timestamp;
+    caller: text;
+};
+
+type IcpFail = variant {
+    Trap: text;
+    Reject: record { code: int32; message: text };
+    SysInvariant: text;
+    DecodeError: text;
+    EncodeError: text;
+    StableMemError: text;
+    CallError: text;
+    Unauthorized: text;
+    Conflict: text;
+    NotFound: text;
+    InvalidState: text;
+    RateLimited: text;
+    Timeout: text;
+    Internal: text;
+};
+
+// Generic FRC result type
+type FRResult<T> = variant {
+    Ok: record { value: T; evidence: Evidence };
+    Fail: record { failure: IcpFail; evidence: Evidence };
+};
+
+// -----------------------------------------------------------------------------
+// Query Results
+// -----------------------------------------------------------------------------
+
+type ProposalResult = FRResult<UpgradeProposal>;
+type AuditorResult = FRResult<Auditor>;
+type ProposalListResult = FRResult<vec UpgradeProposal>;
+type AuditorListResult = FRResult<vec Auditor>;
+type TokenAmountResult = FRResult<TokenAmount>;
+type NatResult = FRResult<nat>;
+
+// -----------------------------------------------------------------------------
+// Update Results
+// -----------------------------------------------------------------------------
+
+type SubmitProposalResult = FRResult<ProposalReceipt>;
+type AssignAuditorResult = FRResult<null>;
+type SubmitReviewResult = FRResult<null>;
+type ExecutionRequestResult = FRResult<ExecutionRequest>;
+type RecordExecutionResult = FRResult<null>;
+type RegisterAuditorResult = FRResult<AuditorId>;
+type DistributeRewardResult = FRResult<TokenAmount>;
+
+// -----------------------------------------------------------------------------
+// Service Interface
+// -----------------------------------------------------------------------------
+
+service : {
+    // =========================================================================
+    // Proposal Operations
+    // =========================================================================
+
+    /// Submit a new upgrade proposal
+    /// Called by LazyEvmLifecycle or directly by users
+    submitProposal: (SubmitProposalArgs) -> (SubmitProposalResult);
+
+    /// Get proposal by ID
+    getProposal: (ProposalId) -> (ProposalResult) query;
+
+    /// Get all proposals for a chain
+    getProposalsByChain: (ChainId) -> (ProposalListResult) query;
+
+    /// Get proposals by status
+    getProposalsByStatus: (ProposalStatus) -> (ProposalListResult) query;
+
+    /// Cancel a pending proposal (only by proposer)
+    cancelProposal: (ProposalId) -> (FRResult<null>);
+
+    // =========================================================================
+    // Auditor Operations
+    // =========================================================================
+
+    /// Register as an auditor (requires stake)
+    registerAuditor: (RegisterAuditorArgs) -> (RegisterAuditorResult);
+
+    /// Get auditor info
+    getAuditor: (AuditorId) -> (AuditorResult) query;
+
+    /// Get all active auditors
+    getActiveAuditors: () -> (AuditorListResult) query;
+
+    /// Suspend auditor (admin only)
+    suspendAuditor: (AuditorId, text) -> (FRResult<null>);
+
+    /// Reactivate suspended auditor
+    reactivateAuditor: (AuditorId) -> (FRResult<null>);
+
+    // =========================================================================
+    // Review Operations
+    // =========================================================================
+
+    /// Assign auditor to proposal (internal/admin)
+    assignAuditor: (ProposalId, AuditorId) -> (AssignAuditorResult);
+
+    /// Submit review for proposal (auditor only)
+    submitReview: (SubmitReviewArgs) -> (SubmitReviewResult);
+
+    /// Get reviews for proposal
+    getReviewsForProposal: (ProposalId) -> (FRResult<vec Review>) query;
+
+    // =========================================================================
+    // Execution Operations
+    // =========================================================================
+
+    /// Prepare execution request for approved proposal
+    prepareExecution: (ProposalId, Timestamp) -> (ExecutionRequestResult);
+
+    /// Record execution result from EVM chain
+    recordExecution: (RecordExecutionArgs) -> (RecordExecutionResult);
+
+    // =========================================================================
+    // Reward Operations
+    // =========================================================================
+
+    /// Get pending reward for auditor
+    getPendingReward: (AuditorId) -> (TokenAmountResult) query;
+
+    /// Get total distributed to auditor
+    getTotalDistributed: (AuditorId) -> (TokenAmountResult) query;
+
+    /// Get treasury balance
+    getTreasuryBalance: () -> (TokenAmountResult) query;
+
+    /// Distribute pending reward (triggered after execution)
+    distributeReward: (AuditorId, ProposalId, text) -> (DistributeRewardResult);
+
+    // =========================================================================
+    // Admin Operations
+    // =========================================================================
+
+    /// Get canister owner
+    getOwner: () -> (principal) query;
+
+    /// Transfer ownership
+    transferOwnership: (principal) -> (FRResult<null>);
+
+    /// Get canister version
+    getVersion: () -> (nat) query;
+
+    // =========================================================================
+    // Statistics
+    // =========================================================================
+
+    /// Get proposal count by status
+    getProposalCount: (ProposalStatus) -> (NatResult) query;
+
+    /// Get total auditor count
+    getAuditorCount: () -> (NatResult) query;
+}

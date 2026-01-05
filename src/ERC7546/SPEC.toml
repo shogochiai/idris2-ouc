@@ -1,0 +1,143 @@
+# ERC-7546 Specification
+# Diamond/Dictionary pattern upgrade execution
+
+[definitions]
+prefix = "ERC7546"
+
+[[spec_area]]
+name = "Dictionary Entry Validation"
+
+[[spec]]
+id = "${prefix}_DICT_001"
+title = "Selector format validated"
+invariant = "isValidSelector true iff hex is 0x-prefixed and length == 10"
+
+[[spec]]
+id = "${prefix}_DICT_002"
+title = "Entry validation checks both fields"
+invariant = "validateEntry fails if selector invalid OR impl address invalid"
+
+[[spec]]
+id = "${prefix}_DICT_003"
+title = "Address format is 0x + 40 hex"
+invariant = "validateEntry fails with DecodeError for addresses not matching pattern"
+
+[[spec_area]]
+name = "Calldata Construction"
+
+[[spec]]
+id = "${prefix}_CALL_001"
+title = "upgradeTo calldata format"
+invariant = "buildUpgradeTo returns 0x3659cfe6 + padded address (72 chars total)"
+
+[[spec]]
+id = "${prefix}_CALL_002"
+title = "Invalid address rejected"
+invariant = "buildUpgradeTo fails with DecodeError for non-0x or wrong length addresses"
+
+[[spec]]
+id = "${prefix}_CALL_003"
+title = "FacetCut requires selectors for Add/Replace"
+invariant = "buildSingleFacetCut fails with InvalidState if selectors empty and action != Remove"
+
+[[spec]]
+id = "${prefix}_CALL_004"
+title = "Batch update requires operations"
+invariant = "buildBatchUpdate fails with InvalidState for empty operation list"
+
+[[spec_area]]
+name = "Upgrade Execution"
+
+[[spec]]
+id = "${prefix}_EXEC_001"
+title = "Proposal must be Approved"
+invariant = "validateUpgradeRequest fails with InvalidState if status != Approved"
+
+[[spec]]
+id = "${prefix}_EXEC_002"
+title = "Execution deadline enforced"
+invariant = "validateUpgradeRequest fails with Timeout if currentTime > deadline"
+
+[[spec]]
+id = "${prefix}_EXEC_003"
+title = "Chain ID must match"
+invariant = "validateUpgradeRequest fails with InvalidState if proposal.chainId != config.chainId"
+
+[[spec]]
+id = "${prefix}_EXEC_004"
+title = "Signature proposal ID must match"
+invariant = "validateUpgradeRequest fails with InvalidState if signatures.proposalId != proposal.id"
+
+[[spec]]
+id = "${prefix}_EXEC_005"
+title = "Signature count verified"
+invariant = "validateUpgradeRequest calls verifySignatureCount which enforces threshold"
+
+[[spec_area]]
+name = "Upgrade Orchestration"
+
+[[spec]]
+id = "${prefix}_ORCH_001"
+title = "Voting must be complete"
+invariant = "orchestrateUpgrade returns UpgradeRejected if voting incomplete"
+
+[[spec]]
+id = "${prefix}_ORCH_002"
+title = "Approval triggers execution"
+invariant = "orchestrateUpgrade with ApproveUpgrade decision proceeds to executeUpgradeViaOU"
+
+[[spec]]
+id = "${prefix}_ORCH_003"
+title = "Rejection returns reason"
+invariant = "orchestrateUpgrade with RejectUpgrade returns UpgradeRejected with reason"
+
+[[spec]]
+id = "${prefix}_ORCH_004"
+title = "Change requests return requirements"
+invariant = "orchestrateUpgrade with RequestChanges returns UpgradeRejected with changes description"
+
+[[spec_area]]
+name = "Dictionary Diff Computation"
+
+[[spec]]
+id = "${prefix}_DIFF_001"
+title = "New selectors generate Add"
+invariant = "computeDiff generates AddEntry for selectors in new but not in old"
+
+[[spec]]
+id = "${prefix}_DIFF_002"
+title = "Removed selectors generate Remove"
+invariant = "computeDiff generates RemoveEntry for selectors in old but not in new"
+
+[[spec]]
+id = "${prefix}_DIFF_003"
+title = "Common selectors generate Replace"
+invariant = "computeDiff generates ReplaceEntry for selectors in both old and new"
+
+[[spec]]
+id = "${prefix}_DIFF_004"
+title = "Analysis counts correct"
+invariant = "analyzeUpgrade.totalOperations == length added + length removed + length replaced"
+
+[[spec_area]]
+name = "Upgrade Lifecycle"
+
+[[spec]]
+id = "${prefix}_LIFE_001"
+title = "Missing proposer sig -> AwaitingProposerSig"
+invariant = "getLifecycleState returns AwaitingProposerSig if proposerSig is Nothing"
+
+[[spec]]
+id = "${prefix}_LIFE_002"
+title = "Complete voting -> ReadyForExecution"
+invariant = "getLifecycleState returns ReadyForExecution if proposerSig present and isVotingComplete"
+
+[[spec]]
+id = "${prefix}_LIFE_003"
+title = "Pending tx -> ExecutionInProgress"
+invariant = "getLifecycleState returns ExecutionInProgress for TxPending receipt"
+
+[[spec]]
+id = "${prefix}_LIFE_004"
+title = "Confirmed tx -> ExecutionComplete"
+invariant = "getLifecycleState returns ExecutionComplete for TxConfirmed receipt with block number"

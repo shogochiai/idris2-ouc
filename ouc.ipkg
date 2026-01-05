@@ -1,0 +1,24 @@
+package ouc
+version = 0.1.0
+authors = "OptimisticUpgrader Team"
+brief   = "Optimistic Upgrader Canister for ICP"
+
+sourcedir = "src"
+
+modules = Util.StringHex
+        , Util.StringCase
+        , FRC.Core
+        , OUC.Core
+        , OUC.MultiSig
+        , OUC.Relay
+        , AuditorPool.Core
+        , Rewards.Core
+        , Proposals.Core
+        , HttpOutcall.Core
+        , HttpOutcall.EvmRpc
+        , HttpOutcall.TxSender
+        , ERC7546.Dictionary
+        , ERC7546.Upgrade
+
+-- main = Main
+-- executable = ouc

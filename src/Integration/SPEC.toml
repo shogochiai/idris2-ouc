@@ -1,0 +1,39 @@
+# Integration Module Specification
+# Full pipeline tests for OUC semantic coverage
+
+[definitions]
+prefix = "INT"
+
+[[spec_area]]
+name = "Full Pipeline Integration"
+
+[[spec]]
+id = "${prefix}_PIPE_001"
+title = "Full proposal -> review -> execution pipeline"
+invariant = "Proposal transitions Pending->UnderReview->Approved->Executed with evidence"
+
+[[spec]]
+id = "${prefix}_PIPE_002"
+title = "Proposal rejection workflow"
+invariant = "Rejected proposals have status=Rejected and cannot be executed"
+
+[[spec_area]]
+name = "Edge Case Integration"
+
+[[spec]]
+id = "${prefix}_EDGE_001"
+title = "Empty state handling"
+invariant = "Empty state returns empty lists for all queries"
+
+[[spec]]
+id = "${prefix}_EDGE_002"
+title = "Invalid execution attempt"
+invariant = "Execution on non-approved proposal returns InvalidState"
+
+[[spec_area]]
+name = "FRC Evidence Chain"
+
+[[spec]]
+id = "${prefix}_EVID_001"
+title = "Evidence chain preserved through operations"
+invariant = "All FR results carry phase, label, and detail"

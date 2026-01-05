@@ -1,0 +1,26 @@
+# Idris2 build artifacts
+build/
+*.ttc
+*.ttm
+*.ibc
+
+# Pack artifacts
+.pack/
+
+# Editor files
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Lazy build cache
+.lazy/
+
+# Logs
+logs/
+*.log
