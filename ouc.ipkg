@@ -9,12 +9,6 @@ sourcedir = "src"
 
 modules = Util.StringHex
         , Util.StringCase
-        -- FR Monad (Failure-Recovery Monad)
-        , FRMonad.Failure
-        , FRMonad.Evidence
-        , FRMonad.Core
-        , FRMonad.Indexed
-        , FRMonad.Graded
         -- OUC Domain Layer
         , OUC.Core
         , OUC.Signatures
