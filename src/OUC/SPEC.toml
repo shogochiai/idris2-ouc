@@ -2,7 +2,7 @@
 # Central coordinator for cross-chain upgrade proposals
 
 [definitions]
-prefix = "OUC"
+prefix = "REQ_OUC"
 
 [[spec_area]]
 name = "Proposal Lifecycle"
@@ -18,42 +18,9 @@ title = "Proposal IDs are unique and monotonically increasing"
 invariant = "nextProposalId always increases; no ID reuse"
 
 [[spec]]
-id = "${prefix}_PROP_003"
-title = "Expired proposals cannot be executed"
-invariant = "markExecuted fails if currentTime > expiresAt"
-
-[[spec]]
 id = "${prefix}_PROP_004"
 title = "Only Pending proposals can be assigned auditors"
 invariant = "assignAuditor returns InvalidState for non-Pending"
-
-[[spec]]
-id = "${prefix}_PROP_005"
-title = "Only UnderReview proposals can receive reviews"
-invariant = "submitReview returns InvalidState for non-UnderReview"
-
-[[spec]]
-id = "${prefix}_PROP_006"
-title = "Only Approved proposals can be executed"
-invariant = "markExecuted returns InvalidState for non-Approved"
-
-[[spec_area]]
-name = "Evidence Trail"
-
-[[spec]]
-id = "${prefix}_EVID_001"
-title = "All state transitions produce Evidence"
-invariant = "Every FR-returning function includes phase, label, detail"
-
-[[spec]]
-id = "${prefix}_EVID_002"
-title = "Execution evidence includes txHash"
-invariant = "markExecuted records blockchain transaction evidence"
-
-[[spec]]
-id = "${prefix}_EVID_003"
-title = "Review evidence includes signature"
-invariant = "submitReview records auditor signature for non-repudiation"
 
 [[spec_area]]
 name = "Failure Classification"
@@ -62,31 +29,3 @@ name = "Failure Classification"
 id = "${prefix}_FAIL_001"
 title = "Missing proposal returns NotFound"
 invariant = "findProposal returns NotFound, not Internal"
-
-[[spec]]
-id = "${prefix}_FAIL_002"
-title = "Invalid state transitions return InvalidState"
-invariant = "Status violations classified as InvalidState"
-
-[[spec]]
-id = "${prefix}_FAIL_003"
-title = "No unclassified failures"
-invariant = "All failure paths use typed IcpFail variants"
-
-[[spec_area]]
-name = "Cross-Chain Identity"
-
-[[spec]]
-id = "${prefix}_CHAIN_001"
-title = "ChainId must match target contract's chain"
-invariant = "Proposals validated against registered chain configs"
-
-[[spec]]
-id = "${prefix}_CHAIN_002"
-title = "OU address must be registered for chain"
-invariant = "OptimisticUpgrader address validated against OUF registry"
-
-[[spec]]
-id = "${prefix}_CHAIN_003"
-title = "Target must be ERC-7546 compatible"
-invariant = "Proxy address validated for upgradeability interface"

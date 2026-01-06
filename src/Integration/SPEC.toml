@@ -2,7 +2,7 @@
 # Full pipeline tests for OUC semantic coverage
 
 [definitions]
-prefix = "INT"
+prefix = "REQ_INT"
 
 [[spec_area]]
 name = "Full Pipeline Integration"
@@ -37,3 +37,93 @@ name = "FRC Evidence Chain"
 id = "${prefix}_EVID_001"
 title = "Evidence chain preserved through operations"
 invariant = "All FR results carry phase, label, and detail"
+
+[[spec_area]]
+name = "markExecuted Case Coverage"
+
+[[spec]]
+id = "${prefix}_EXEC_001"
+title = "markExecuted on approved proposal"
+invariant = "Approved proposal can be marked executed"
+
+[[spec]]
+id = "${prefix}_EXEC_002"
+title = "markExecuted on pending fails"
+invariant = "Pending proposal cannot be executed"
+
+[[spec]]
+id = "${prefix}_EXEC_003"
+title = "markExecuted on rejected fails"
+invariant = "Rejected proposal cannot be executed"
+
+[[spec_area]]
+name = "submitReview Case Coverage"
+
+[[spec]]
+id = "${prefix}_REV_001"
+title = "submitReview on UnderReview"
+invariant = "UnderReview proposal can receive review"
+
+[[spec]]
+id = "${prefix}_REV_002"
+title = "submitReview on pending fails"
+invariant = "Pending proposal cannot receive review"
+
+[[spec]]
+id = "${prefix}_REV_003"
+title = "submitReview with RequestChanges"
+invariant = "RequestChanges keeps proposal in UnderReview"
+
+[[spec_area]]
+name = "getPendingForChain Coverage"
+
+[[spec]]
+id = "${prefix}_PEND_001"
+title = "getPendingForChain with matching chain"
+invariant = "Returns pending proposals for specified chain"
+
+[[spec]]
+id = "${prefix}_PEND_002"
+title = "getPendingForChain with non-matching chain"
+invariant = "Returns empty for different chain"
+
+[[spec]]
+id = "${prefix}_PEND_003"
+title = "getPendingForChain excludes non-Pending"
+invariant = "Only Pending status included"
+
+[[spec]]
+id = "${prefix}_PEND_004"
+title = "getPendingForChain with multiple proposals"
+invariant = "Returns all matching proposals"
+
+[[spec_area]]
+name = "recordExecution Coverage"
+
+[[spec]]
+id = "${prefix}_RECEX_001"
+title = "recordExecution with ExecReverted"
+invariant = "Reverted execution returns CallError"
+
+[[spec]]
+id = "${prefix}_RECEX_002"
+title = "recordExecution with ExecTimeout"
+invariant = "Timeout execution returns Timeout failure"
+
+[[spec]]
+id = "${prefix}_RECEX_003"
+title = "recordExecution with RPC error"
+invariant = "RPC error returns CallError"
+
+[[spec_area]]
+name = "getAwaitingReview Coverage"
+
+[[spec]]
+id = "${prefix}_AWAIT_001"
+title = "getAwaitingReview with UnderReview proposals"
+invariant = "Returns proposals in UnderReview status"
+
+[[spec]]
+id = "${prefix}_AWAIT_002"
+title = "getAwaitingReview excludes Approved"
+invariant = "Approved proposals not included"

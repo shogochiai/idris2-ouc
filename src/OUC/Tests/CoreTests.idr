@@ -1,6 +1,7 @@
 ||| OUC Core Module Tests
 module OUC.Tests.CoreTests
 
+import Idris2CoverageHelper.PerModule
 import FRMonad.Core
 import OUC.Core
 import Data.List
@@ -176,30 +177,18 @@ test_missing_proposal_not_found = do
 -- =============================================================================
 
 public export
-allTests : List (String, IO Bool)
+allTests : List TestDef
 allTests =
-  [ ("OUC_PROP_001: Proposal lifecycle transitions", test_proposal_lifecycle)
-  , ("OUC_PROP_002: Proposal IDs unique and increasing", test_proposal_ids_unique)
-  , ("OUC_PROP_004: Assign non-pending fails", test_assign_non_pending_fails)
-  , ("OUC_FAIL_001: Missing proposal returns NotFound", test_missing_proposal_not_found)
+  [ test "REQ_OUC_PROP_001" "Proposal lifecycle transitions" test_proposal_lifecycle
+  , test "REQ_OUC_PROP_002" "Proposal IDs unique and increasing" test_proposal_ids_unique
+  , test "REQ_OUC_PROP_004" "Assign non-pending fails" test_assign_non_pending_fails
+  , test "REQ_OUC_FAIL_001" "Missing proposal returns NotFound" test_missing_proposal_not_found
   ]
 
-||| Run all tests
+||| Run all tests (required by idris2-coverage UnifiedRunner)
 export
 runAllTests : IO ()
-runAllTests = do
-  putStrLn "=== OUC Core Tests ==="
-  results <- traverse runTest allTests
-  let passed = length (filter id results)
-      total = length results
-  putStrLn $ "\nPassed: " ++ show passed ++ "/" ++ show total
-  where
-    runTest : (String, IO Bool) -> IO Bool
-    runTest (name, test) = do
-      putStr $ name ++ "... "
-      result <- test
-      putStrLn $ if result then "PASS" else "FAIL"
-      pure result
+runAllTests = runTestSuite "OUC.Core" allTests
 
 main : IO ()
 main = runAllTests

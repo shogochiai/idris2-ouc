@@ -2,6 +2,7 @@
 ||| These tests exercise full pipelines for OUC to maximize semantic coverage
 module Integration.Tests.AllTests
 
+import Idris2CoverageHelper.PerModule
 import FRMonad.Core
 import OUC.Core
 import AuditorPool.Core
@@ -416,69 +417,41 @@ test_evidence_chain = do
 -- Test Collection
 -- =============================================================================
 
-record TestDef where
-  constructor MkTestDef
-  testId : String
-  testName : String
-  testFn : IO Bool
-
-test : String -> String -> IO Bool -> TestDef
-test = MkTestDef
-
 public export
 allTests : List TestDef
 allTests =
-  [ test "INT_PIPE_001" "Full proposal->execution pipeline" test_full_pipeline
-  , test "INT_PIPE_002" "Proposal rejection workflow" test_rejection_workflow
-  , test "INT_EDGE_001" "Empty state handling" test_empty_state
-  , test "INT_EDGE_002" "Invalid execution attempt" test_invalid_execution
-  , test "INT_EVID_001" "Evidence chain preserved" test_evidence_chain
+  [ test "REQ_INT_PIPE_001" "Full proposal->execution pipeline" test_full_pipeline
+  , test "REQ_INT_PIPE_002" "Proposal rejection workflow" test_rejection_workflow
+  , test "REQ_INT_EDGE_001" "Empty state handling" test_empty_state
+  , test "REQ_INT_EDGE_002" "Invalid execution attempt" test_invalid_execution
+  , test "REQ_INT_EVID_001" "Evidence chain preserved" test_evidence_chain
   -- markExecuted case block tests (severity=Inf)
-  , test "INT_EXEC_001" "markExecuted on approved" test_markExecuted_approved
-  , test "INT_EXEC_002" "markExecuted on pending fails" test_markExecuted_pending
-  , test "INT_EXEC_003" "markExecuted on rejected fails" test_markExecuted_rejected
+  , test "REQ_INT_EXEC_001" "markExecuted on approved" test_markExecuted_approved
+  , test "REQ_INT_EXEC_002" "markExecuted on pending fails" test_markExecuted_pending
+  , test "REQ_INT_EXEC_003" "markExecuted on rejected fails" test_markExecuted_rejected
   -- submitReview case block tests (severity=Inf)
-  , test "INT_REV_001" "submitReview on UnderReview" test_submitReview_underReview
-  , test "INT_REV_002" "submitReview on pending fails" test_submitReview_pending
-  , test "INT_REV_003" "submitReview RequestChanges" test_submitReview_requestChanges
+  , test "REQ_INT_REV_001" "submitReview on UnderReview" test_submitReview_underReview
+  , test "REQ_INT_REV_002" "submitReview on pending fails" test_submitReview_pending
+  , test "REQ_INT_REV_003" "submitReview RequestChanges" test_submitReview_requestChanges
   -- getPendingForChain tests (severity=5.0)
-  , test "INT_PEND_001" "getPendingForChain match" test_getPendingForChain_match
-  , test "INT_PEND_002" "getPendingForChain no match" test_getPendingForChain_noMatch
-  , test "INT_PEND_003" "getPendingForChain excludes non-Pending" test_getPendingForChain_excludeNonPending
-  , test "INT_PEND_004" "getPendingForChain multiple" test_getPendingForChain_multiple
+  , test "REQ_INT_PEND_001" "getPendingForChain match" test_getPendingForChain_match
+  , test "REQ_INT_PEND_002" "getPendingForChain no match" test_getPendingForChain_noMatch
+  , test "REQ_INT_PEND_003" "getPendingForChain excludes non-Pending" test_getPendingForChain_excludeNonPending
+  , test "REQ_INT_PEND_004" "getPendingForChain multiple" test_getPendingForChain_multiple
   -- recordExecution tests (severity=4.0)
-  , test "INT_RECEX_001" "recordExecution reverted" test_recordExecution_reverted
-  , test "INT_RECEX_002" "recordExecution timeout" test_recordExecution_timeout
-  , test "INT_RECEX_003" "recordExecution RPC error" test_recordExecution_rpcError
+  , test "REQ_INT_RECEX_001" "recordExecution reverted" test_recordExecution_reverted
+  , test "REQ_INT_RECEX_002" "recordExecution timeout" test_recordExecution_timeout
+  , test "REQ_INT_RECEX_003" "recordExecution RPC error" test_recordExecution_rpcError
   -- getAwaitingReview tests (severity=2.0)
-  , test "INT_AWAIT_001" "getAwaitingReview present" test_getAwaitingReview_present
-  , test "INT_AWAIT_002" "getAwaitingReview excludes Approved" test_getAwaitingReview_excludeApproved
+  , test "REQ_INT_AWAIT_001" "getAwaitingReview present" test_getAwaitingReview_present
+  , test "REQ_INT_AWAIT_002" "getAwaitingReview excludes Approved" test_getAwaitingReview_excludeApproved
   ]
-
--- =============================================================================
--- Test Runner
--- =============================================================================
-
-runTestSuite : String -> List TestDef -> IO ()
-runTestSuite suiteName tests = do
-  putStrLn $ "=== " ++ suiteName ++ " Tests ==="
-  results <- traverse runSingleTest tests
-  printResults results
-  where
-    printResults : List Bool -> IO ()
-    printResults rs = putStrLn $ "\nPassed: " ++ show (length (filter id rs)) ++ "/" ++ show (length rs)
-    runSingleTest : TestDef -> IO Bool
-    runSingleTest t = do
-      putStr $ t.testId ++ " " ++ t.testName ++ "... "
-      result <- t.testFn
-      putStrLn $ if result then "PASS" else "FAIL"
-      pure result
 
 -- =============================================================================
 -- Main Entry Point
 -- =============================================================================
 
-||| Run all tests
+||| Run all tests (required by idris2-coverage UnifiedRunner)
 export
 runAllTests : IO ()
 runAllTests = runTestSuite "Integration" allTests
