@@ -4,6 +4,7 @@
 module HttpOutcall.EvmRpc
 
 import FRMonad.Core
+import FRMonad.Failure
 import HttpOutcall.Core
 import Data.List
 import Data.String
@@ -108,22 +109,22 @@ classifyRpcError err =
                   then RpcServerError (cast err.code) err.message
                   else classifyByMessage err.message (cast err.code)
 
-||| Convert EvmRpcFail to IcpFail
+||| Convert EvmRpcFail to Fail
 public export
-evmRpcFailToIcpFail : EvmRpcFail -> IcpFail
-evmRpcFailToIcpFail (RpcExecutionReverted s) = CallError ("Reverted: " ++ s)
-evmRpcFailToIcpFail RpcNonceTooLow           = Conflict "Nonce too low"
-evmRpcFailToIcpFail RpcNonceTooHigh          = Conflict "Nonce too high"
-evmRpcFailToIcpFail RpcInsufficientFunds     = Unauthorized "Insufficient funds"
-evmRpcFailToIcpFail RpcUnderpriced           = Conflict "Transaction underpriced"
-evmRpcFailToIcpFail RpcAlreadyKnown          = Conflict "Transaction already known"
-evmRpcFailToIcpFail RpcReplacementUnderpriced = Conflict "Replacement transaction underpriced"
-evmRpcFailToIcpFail RpcGasLimitExceeded      = CallError "Gas limit exceeded"
-evmRpcFailToIcpFail (RpcParseError s)        = DecodeError s
-evmRpcFailToIcpFail (RpcInvalidRequest s)    = DecodeError s
-evmRpcFailToIcpFail (RpcMethodNotFound s)    = NotFound s
-evmRpcFailToIcpFail (RpcInvalidParams s)     = DecodeError s
-evmRpcFailToIcpFail other                    = CallError (show other)
+evmRpcFailToFail : EvmRpcFail -> Fail
+evmRpcFailToFail (RpcExecutionReverted s) = CallError ("Reverted: " ++ s)
+evmRpcFailToFail RpcNonceTooLow           = Conflict "Nonce too low"
+evmRpcFailToFail RpcNonceTooHigh          = Conflict "Nonce too high"
+evmRpcFailToFail RpcInsufficientFunds     = Unauthorized "Insufficient funds"
+evmRpcFailToFail RpcUnderpriced           = Conflict "Transaction underpriced"
+evmRpcFailToFail RpcAlreadyKnown          = Conflict "Transaction already known"
+evmRpcFailToFail RpcReplacementUnderpriced = Conflict "Replacement transaction underpriced"
+evmRpcFailToFail RpcGasLimitExceeded      = CallError "Gas limit exceeded"
+evmRpcFailToFail (RpcParseError s)        = DecodeError s
+evmRpcFailToFail (RpcInvalidRequest s)    = DecodeError s
+evmRpcFailToFail (RpcMethodNotFound s)    = NotFound s
+evmRpcFailToFail (RpcInvalidParams s)     = DecodeError s
+evmRpcFailToFail other                    = CallError (show other)
 
 -- =============================================================================
 -- JSON-RPC Request Building

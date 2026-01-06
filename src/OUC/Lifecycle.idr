@@ -9,9 +9,9 @@
 ||| Based on Karma.Indexed pattern for ICP call lifecycle.
 module OUC.Lifecycle
 
-import public Karma.Indexed
-import public FRC.Conflict
-import public FRC.Evidence
+import public FRMonad.Indexed
+import public FRMonad.Failure
+import public FRMonad.Evidence
 import OUC.Core
 import Data.List
 
@@ -62,7 +62,7 @@ Eq ProposalState where
 ||| PFR s t a represents a computation that:
 |||   - Starts in proposal state s
 |||   - Ends in proposal state t
-|||   - Produces a value of type a (or fails with IcpFail)
+|||   - Produces a value of type a (or fails with Fail)
 |||   - Carries evidence regardless of success/failure
 |||
 ||| Key property: Invalid state transitions are compile-time errors
@@ -72,7 +72,7 @@ data PFR : (start : ProposalState) -> (end : ProposalState) -> (result : Type) -
   PPure : (value : a) -> (evidence : Evidence) -> PFR s s a
 
   ||| Failure, no state change
-  PFail : (failure : IcpFail) -> (evidence : Evidence) -> PFR s s a
+  PFail : (failure : Fail) -> (evidence : Evidence) -> PFR s s a
 
   ||| Sequential composition with state threading
   PBind : PFR s t a -> (a -> PFR t u b) -> PFR s u b
@@ -158,12 +158,12 @@ ppureWith = PPure
 
 ||| Failure (no state change)
 public export
-pfail : IcpFail -> PFR s s a
+pfail : Fail -> PFR s s a
 pfail f = PFail f emptyEvidence
 
 ||| Failure with evidence
 public export
-pfailWith : IcpFail -> Evidence -> PFR s s a
+pfailWith : Fail -> Evidence -> PFR s s a
 pfailWith = PFail
 
 ||| Sequential composition (bind)
@@ -265,19 +265,19 @@ pcompute = ppure
 
 ||| Guard that fails if condition is false (no state change)
 public export
-pguard : Bool -> IcpFail -> PFR s s ()
+pguard : Bool -> Fail -> PFR s s ()
 pguard True  _ = ppure ()
 pguard False f = pfail f
 
 ||| Require Maybe to be Just (no state change)
 public export
-prequireJust : Maybe a -> IcpFail -> PFR s s a
+prequireJust : Maybe a -> Fail -> PFR s s a
 prequireJust (Just v) _ = ppure v
 prequireJust Nothing  f = pfail f
 
 ||| Require Either to be Right (no state change)
 public export
-prequireRight : Either String a -> (String -> IcpFail) -> PFR s s a
+prequireRight : Either String a -> (String -> Fail) -> PFR s s a
 prequireRight (Right v) _ = ppure v
 prequireRight (Left e) f  = pfail (f e)
 
@@ -328,7 +328,7 @@ data PFRResult : ProposalState -> Type -> Type where
   ||| Successful completion with value
   PROk : (value : a) -> (evidence : Evidence) -> (finalState : ProposalState) -> PFRResult s a
   ||| Failed with error
-  PRFail : (failure : IcpFail) -> (evidence : Evidence) -> (finalState : ProposalState) -> PFRResult s a
+  PRFail : (failure : Fail) -> (evidence : Evidence) -> (finalState : ProposalState) -> PFRResult s a
 
 public export
 Show a => Show (PFRResult s a) where

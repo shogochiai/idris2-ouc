@@ -13,9 +13,9 @@
 |||   sendTx : OFR [HttpCall "evm-rpc", CyclesConsumed 10000000000, StateModified] TxHash
 module OUC.Obligations
 
-import public Karma.Graded
-import public FRC.Conflict
-import public FRC.Evidence
+import public FRMonad.Graded
+import public FRMonad.Failure
+import public FRMonad.Evidence
 import OUC.Core
 import HttpOutcall.Core
 import Data.List

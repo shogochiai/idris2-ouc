@@ -1,8 +1,7 @@
 [custom.all.idris2-cdk]
-type   = "github"
-url    = "https://github.com/shogochiai/idris2-cdk"
-commit = "86202566ff916e27146a7bc33aba1feecdbbe430"
-ipkg   = "idris2-cdk.ipkg"
+type = "local"
+path = "/Users/bob/code/idris2-cdk"
+ipkg = "idris2-cdk.ipkg"
 
 [custom.all.ouc]
 type = "local"
