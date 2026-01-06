@@ -45,18 +45,18 @@ public export
 Eq EvmAddress where
   a1 == a2 = a1.hex == a2.hex
 
-||| ICP Principal (as string)
+||| ICP Principal (as string representation)
 public export
-record Principal where
-  constructor MkPrincipal
+record ICPrincipal where
+  constructor MkICPrincipal
   text : String
 
 public export
-Show Principal where
+Show ICPrincipal where
   show p = p.text
 
 public export
-Eq Principal where
+Eq ICPrincipal where
   p1 == p2 = p1.text == p2.text
 
 -- =============================================================================
@@ -67,7 +67,7 @@ Eq Principal where
 public export
 record AuditorId where
   constructor MkAuditorId
-  principal : Principal
+  principal : ICPrincipal
 
 public export
 Show AuditorId where
@@ -137,7 +137,7 @@ record UpgradeProposal where
   target           : EvmAddress     -- Contract to upgrade (ERC-7546 Proxy)
   newImpl          : EvmAddress     -- New implementation address
   ou               : EvmAddress     -- OptimisticUpgrader contract
-  proposer         : Principal      -- ICP principal who submitted
+  proposer         : ICPrincipal    -- ICP principal who submitted
   rationale        : String         -- Human-readable justification
   codeHash         : String         -- Hash of new implementation code
   status           : ProposalStatus
@@ -243,12 +243,12 @@ record OUCState where
   proposals      : List UpgradeProposal
   auditors       : List Auditor
   reviews        : List Review
-  owner          : Principal
+  owner          : ICPrincipal
   version        : Nat
 
 ||| Initial OUC state
 public export
-initialState : Principal -> OUCState
+initialState : ICPrincipal -> OUCState
 initialState owner = MkOUCState 1 [] [] [] owner 1
 
 -- =============================================================================
@@ -263,7 +263,7 @@ submitProposal :
   EvmAddress ->      -- target
   EvmAddress ->      -- newImpl
   EvmAddress ->      -- ou
-  Principal ->       -- proposer
+  ICPrincipal ->     -- proposer
   String ->          -- rationale
   String ->          -- codeHash
   Nat ->             -- currentTime

@@ -88,7 +88,7 @@ Show SelectionCriteria where
 public export
 registerAuditor :
   List Auditor ->
-  Principal ->
+  ICPrincipal ->
   Nat ->               -- stake amount
   Nat ->               -- currentTime
   PoolConfig ->
@@ -98,7 +98,7 @@ registerAuditor auditors principal stakeAmount now config =
     then fail Update "registerAuditor" "Insufficient stake"
               (Unauthorized ("Stake " ++ show stakeAmount ++ " < " ++ show config.minStakeAmount))
     else
-      let aid = MkAuditorId (MkPrincipal principal.text)
+      let aid = MkAuditorId (MkICPrincipal principal.text)
           existing = find (\a => a.id == aid) auditors
       in case existing of
         Just _ => fail Update "registerAuditor" "Already registered"

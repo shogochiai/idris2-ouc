@@ -13,7 +13,7 @@ import FRC.Core
 ||| Initialize OUC state with anonymous principal (will be set properly in canister_init)
 export
 initialOUCState : OUCState
-initialOUCState = initialState (MkPrincipal "aaaaa-aa")
+initialOUCState = initialState (MkICPrincipal "aaaaa-aa")
 
 ||| Main expression - called by canister_init
 ||| For now, just returns unit. The actual state is managed in C until

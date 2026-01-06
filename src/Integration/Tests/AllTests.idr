@@ -16,8 +16,8 @@ import Data.String
 -- Test Helpers
 -- =============================================================================
 
-testPrincipal : Principal
-testPrincipal = MkPrincipal "2vxsx-fae"
+testPrincipal : ICPrincipal
+testPrincipal = MkICPrincipal "2vxsx-fae"
 
 testChain : ChainId
 testChain = MkChainId 1

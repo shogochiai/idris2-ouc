@@ -46,7 +46,7 @@ public export
 record FeeCollection where
   constructor MkFeeCollection
   proposalId  : ProposalId
-  payer       : Principal
+  payer       : ICPrincipal
   amount      : TokenAmount
   collectedAt : Nat
 
@@ -143,7 +143,7 @@ public export
 collectFee :
   RewardsState ->
   ProposalId ->
-  Principal ->
+  ICPrincipal ->
   TokenAmount ->
   Nat ->               -- currentTime
   FR RewardsState

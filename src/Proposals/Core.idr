@@ -114,7 +114,7 @@ receiveFromLifecycle :
   EvmAddress ->              -- target
   EvmAddress ->              -- newImpl
   EvmAddress ->              -- ou
-  Principal ->               -- proposer
+  ICPrincipal ->             -- proposer
   String ->                  -- rationale
   String ->                  -- codeHash
   String ->                  -- sourceEvidence (from LazyEvmLifecycle)

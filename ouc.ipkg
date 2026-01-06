@@ -9,12 +9,13 @@ sourcedir = "src"
 
 modules = Util.StringHex
         , Util.StringCase
-        , FRC.Core
         -- OUC Domain Layer
         , OUC.Core
         , OUC.Signatures
         , OUC.MultiSig
         , OUC.Relay
+        , OUC.Lifecycle
+        , OUC.Obligations
         , AuditorPool.Core
         , Rewards.Core
         , Proposals.Core

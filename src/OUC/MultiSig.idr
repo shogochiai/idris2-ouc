@@ -152,7 +152,7 @@ public export
 submitProposerSignature :
   VotingSession ->
   String ->           -- signature
-  Principal ->        -- expected proposer (for validation context)
+  ICPrincipal ->      -- expected proposer (for validation context)
   FR VotingSession
 submitProposerSignature session sig proposer =
   case session.proposerSig of

@@ -4,7 +4,10 @@
 ||| Provides typed HTTP requests with classified failure handling.
 module HttpOutcall.Core
 
-import FRC.Core
+-- Import FRC modules individually to avoid HttpMethod/HttpHeader collision
+import FRC.Conflict
+import FRC.Evidence
+import FRC.Outcome
 import Data.List
 import Data.String
 import Util.StringCase
