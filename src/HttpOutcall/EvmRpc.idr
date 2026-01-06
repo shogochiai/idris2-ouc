@@ -3,7 +3,7 @@
 ||| Constructs and parses Ethereum JSON-RPC requests/responses.
 module HttpOutcall.EvmRpc
 
-import FRC.Core
+import FRMonad.Core
 import HttpOutcall.Core
 import Data.List
 import Data.String

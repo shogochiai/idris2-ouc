@@ -7,7 +7,7 @@
 ||| 4. Verify execution result on-chain
 module ERC7546.Upgrade
 
-import FRC.Core
+import FRMonad.Core
 import OUC.Core
 import OUC.MultiSig
 import OUC.Signatures
@@ -59,7 +59,7 @@ data UpgradeResult
   | UpgradeReverted String TxReceipt
   | UpgradeTimeout TxHash
   | UpgradeRejected String         -- Proposal was rejected
-  | UpgradeFailed IcpFail
+  | UpgradeFailed Fail
 
 public export
 Show UpgradeResult where

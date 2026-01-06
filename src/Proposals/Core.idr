@@ -8,7 +8,7 @@
 ||| - EVM chains (execution via HttpOutcall)
 module Proposals.Core
 
-import FRC.Core
+import FRMonad.Core
 import OUC.Core
 import Data.List
 

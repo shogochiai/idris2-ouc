@@ -8,7 +8,7 @@
 ||| - Evidence collection for FRC compliance
 module OUC.Core
 
-import FRC.Core
+import FRMonad.Core
 import Data.List
 
 %default total

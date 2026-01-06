@@ -4,7 +4,7 @@
 ||| ERC-7546 uses a function selector -> implementation address mapping.
 module ERC7546.Dictionary
 
-import FRC.Core
+import FRMonad.Core
 import Data.List
 import Data.String
 import Util.StringHex as SHex

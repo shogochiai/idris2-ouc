@@ -4,7 +4,7 @@
 ||| Uses Util.StringHex, minimal FRC dependency.
 module HttpOutcall.TxSender.Abi
 
-import FRC.Core
+import FRMonad.Core
 import Util.StringHex
 import Data.List
 

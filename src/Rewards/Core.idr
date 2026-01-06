@@ -8,7 +8,7 @@
 ||| - Treasury management
 module Rewards.Core
 
-import FRC.Core
+import FRMonad.Core
 import OUC.Core
 import Data.List
 import Data.Nat

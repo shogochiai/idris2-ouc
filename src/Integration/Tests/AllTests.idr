@@ -2,7 +2,7 @@
 ||| These tests exercise full pipelines for OUC to maximize semantic coverage
 module Integration.Tests.AllTests
 
-import FRC.Core
+import FRMonad.Core
 import OUC.Core
 import AuditorPool.Core
 import Rewards.Core

@@ -6,7 +6,7 @@
 module Main
 
 import OUC.Core
-import FRC.Core
+import FRMonad.Core
 
 %default total
 

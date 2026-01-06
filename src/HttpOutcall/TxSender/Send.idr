@@ -3,7 +3,7 @@
 ||| RPC-dependent operations for sending and tracking transactions.
 module HttpOutcall.TxSender.Send
 
-import FRC.Core
+import FRMonad.Core
 import HttpOutcall.TxSender.Types
 import HttpOutcall.TxSender.Abi
 import OUC.Signatures

@@ -4,10 +4,10 @@
 ||| Provides typed HTTP requests with classified failure handling.
 module HttpOutcall.Core
 
--- Import FRC modules individually to avoid HttpMethod/HttpHeader collision
-import FRC.Conflict
-import FRC.Evidence
-import FRC.Outcome
+-- Import FRMonad modules
+import FRMonad.Failure
+import FRMonad.Evidence
+import FRMonad.Core
 import Data.List
 import Data.String
 import Util.StringCase
@@ -114,20 +114,20 @@ Show HttpFail where
   show (HttpParseError s)     = "ParseError: " ++ s
   show (HttpTransformError s) = "TransformError: " ++ s
 
-||| Convert HttpFail to IcpFail for FR integration
+||| Convert HttpFail to Fail for FR integration
 public export
-httpFailToIcpFail : HttpFail -> IcpFail
-httpFailToIcpFail HttpTimeout            = Timeout "HTTP request timeout"
-httpFailToIcpFail (HttpConnectError s)   = CallError ("Connect: " ++ s)
-httpFailToIcpFail (HttpTlsError s)       = CallError ("TLS: " ++ s)
-httpFailToIcpFail (HttpDnsError s)       = CallError ("DNS: " ++ s)
-httpFailToIcpFail HttpResponseTooLarge   = CallError "Response too large"
-httpFailToIcpFail (HttpInvalidUrl s)     = DecodeError ("Invalid URL: " ++ s)
-httpFailToIcpFail (HttpRateLimited n)    = RateLimited ("Retry after " ++ show n ++ "s")
-httpFailToIcpFail (HttpServerError c m)  = CallError ("Server " ++ show c ++ ": " ++ m)
-httpFailToIcpFail (HttpClientError c m)  = CallError ("Client " ++ show c ++ ": " ++ m)
-httpFailToIcpFail (HttpParseError s)     = DecodeError ("Parse: " ++ s)
-httpFailToIcpFail (HttpTransformError s) = DecodeError ("Transform: " ++ s)
+httpFailToFail : HttpFail -> Fail
+httpFailToFail HttpTimeout            = Timeout "HTTP request timeout"
+httpFailToFail (HttpConnectError s)   = CallError ("Connect: " ++ s)
+httpFailToFail (HttpTlsError s)       = CallError ("TLS: " ++ s)
+httpFailToFail (HttpDnsError s)       = CallError ("DNS: " ++ s)
+httpFailToFail HttpResponseTooLarge   = CallError "Response too large"
+httpFailToFail (HttpInvalidUrl s)     = DecodeError ("Invalid URL: " ++ s)
+httpFailToFail (HttpRateLimited n)    = RateLimited ("Retry after " ++ show n ++ "s")
+httpFailToFail (HttpServerError c m)  = CallError ("Server " ++ show c ++ ": " ++ m)
+httpFailToFail (HttpClientError c m)  = CallError ("Client " ++ show c ++ ": " ++ m)
+httpFailToFail (HttpParseError s)     = DecodeError ("Parse: " ++ s)
+httpFailToFail (HttpTransformError s) = DecodeError ("Transform: " ++ s)
 
 -- =============================================================================
 -- Transform Configuration
@@ -262,9 +262,9 @@ public export
 validateUrl : String -> FR ()
 validateUrl url =
   if length url == 0
-    then fail Query "validateUrl" "Empty URL" (httpFailToIcpFail (HttpInvalidUrl "URL cannot be empty"))
+    then fail Query "validateUrl" "Empty URL" (httpFailToFail (HttpInvalidUrl "URL cannot be empty"))
     else if not (isPrefixOf "https://" url)
-      then fail Query "validateUrl" "Must use HTTPS" (httpFailToIcpFail (HttpInvalidUrl "IC requires HTTPS"))
+      then fail Query "validateUrl" "Must use HTTPS" (httpFailToFail (HttpInvalidUrl "IC requires HTTPS"))
       else ok Query "validateUrl" ("Valid: " ++ url) ()
 
 -- =============================================================================

@@ -1,7 +1,7 @@
 ||| OUC Core Module Tests
 module OUC.Tests.CoreTests
 
-import FRC.Core
+import FRMonad.Core
 import OUC.Core
 import Data.List
 

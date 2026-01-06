@@ -4,7 +4,7 @@
 ||| Both the proposer and all assigned auditors must sign for approval.
 module OUC.MultiSig
 
-import FRC.Core
+import FRMonad.Core
 import OUC.Core
 import Data.List
 import Data.Maybe

@@ -10,7 +10,7 @@
 ||| 4. OUC handles all chain details
 module OUC.Relay
 
-import FRC.Core
+import FRMonad.Core
 import OUC.Core
 import HttpOutcall.Core
 import HttpOutcall.EvmRpc
@@ -261,7 +261,7 @@ public export
 data VoteResult
   = VoteSubmitted TxHash
   | VotePending String       -- Waiting for tx confirmation
-  | VoteFailed IcpFail
+  | VoteFailed Fail
 
 public export
 Show VoteResult where
