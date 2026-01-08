@@ -243,3 +243,106 @@ uint64_t ic0_instruction_counter(void) { return ic0_instruction_counter_impl(); 
 int32_t ic0_is_controller(int32_t src, int32_t size) {
     return (int32_t)ic0_is_controller_impl((uint32_t)src, (uint32_t)size);
 }
+
+/* =============================================================================
+ * OUC FFI Bridge
+ * These enable communication between C (canister_entry.c) and Idris2 (Main.idr)
+ * Note: Idris2 Int is 64-bit, so we accept int64_t and truncate/extend as needed
+ * ============================================================================= */
+
+/* Global variables for C<->Idris2 communication */
+static int32_t ouc_result_i32 = 0;
+static int32_t ouc_arg_i32[8] = {0};  /* Up to 8 int32 args */
+static int32_t ouc_state_initialized = 0;  /* Persistent state flag */
+static int32_t ouc_auditor_count = 0;  /* Persistent auditor count */
+
+/* Called from Idris2 via %foreign to set result (Idris2 Int -> int64_t) */
+void ouc_set_result_i32(int64_t value) {
+    ouc_result_i32 = (int32_t)value;
+}
+
+/* Called from Idris2 via %foreign to get argument (returns Idris2 Int) */
+int64_t ouc_get_arg_i32(int64_t index) {
+    int64_t result = 0;
+    if (index >= 0 && index < 8) {
+        result = (int64_t)ouc_arg_i32[(int32_t)index];
+    }
+    /* Debug: log the argument being read */
+    char buf[64];
+    int len = 0;
+    buf[len++] = 'g'; buf[len++] = 'e'; buf[len++] = 't';
+    buf[len++] = '['; buf[len++] = '0' + (char)index; buf[len++] = ']';
+    buf[len++] = '=';
+    if (result < 0) { buf[len++] = '-'; result = -result; }
+    if (result >= 100) buf[len++] = '0' + (char)((result / 100) % 10);
+    if (result >= 10) buf[len++] = '0' + (char)((result / 10) % 10);
+    buf[len++] = '0' + (char)(result % 10);
+    ic0_debug_print_impl((uint32_t)(uintptr_t)buf, len);
+    return (index >= 0 && index < 8) ? (int64_t)ouc_arg_i32[(int32_t)index] : 0;
+}
+
+/* Called from C to set argument for Idris2 */
+void ouc_c_set_arg_i32(int32_t index, int32_t value) {
+    if (index >= 0 && index < 8) {
+        ouc_arg_i32[index] = value;
+    }
+}
+
+/* Called from C to get result from Idris2 */
+int32_t ouc_c_get_result_i32(void) {
+    return ouc_result_i32;
+}
+
+/* Reset communication state */
+void ouc_reset_ffi(void) {
+    ouc_result_i32 = 0;
+    for (int i = 0; i < 8; i++) {
+        ouc_arg_i32[i] = 0;
+    }
+}
+
+/* State initialization flag (persistent across calls) */
+void ouc_set_state_initialized(int64_t value) {
+    ouc_state_initialized = (int32_t)value;
+}
+
+int64_t ouc_get_state_initialized(void) {
+    /* Debug: log the state check */
+    char buf[32] = "state=";
+    int len = 6;
+    int32_t val = ouc_state_initialized;
+    if (val < 0) { buf[len++] = '-'; val = -val; }
+    buf[len++] = '0' + (char)(val % 10);
+    ic0_debug_print_impl((uint32_t)(uintptr_t)buf, len);
+    return (int64_t)ouc_state_initialized;
+}
+
+/* Auditor count (persistent across calls) */
+void ouc_set_auditor_count(int64_t value) {
+    ouc_auditor_count = (int32_t)value;
+}
+
+int64_t ouc_get_auditor_count(void) {
+    /* Debug: log the count being read */
+    char buf[32] = "audcnt=";
+    int len = 7;
+    int32_t val = ouc_auditor_count;
+    if (val < 0) { buf[len++] = '-'; val = -val; }
+    if (val >= 10) buf[len++] = '0' + (char)((val / 10) % 10);
+    buf[len++] = '0' + (char)(val % 10);
+    ic0_debug_print_impl((uint32_t)(uintptr_t)buf, len);
+    return (int64_t)ouc_auditor_count;
+}
+
+int64_t ouc_inc_auditor_count(void) {
+    ouc_auditor_count++;
+    /* Debug: log the increment */
+    char buf[32] = "inc->audcnt=";
+    int len = 12;
+    int32_t val = ouc_auditor_count;
+    if (val < 0) { buf[len++] = '-'; val = -val; }
+    if (val >= 10) buf[len++] = '0' + (char)((val / 10) % 10);
+    buf[len++] = '0' + (char)(val % 10);
+    ic0_debug_print_impl((uint32_t)(uintptr_t)buf, len);
+    return (int64_t)ouc_auditor_count;  /* Return new count to prevent optimization */
+}

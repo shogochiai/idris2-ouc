@@ -22,7 +22,35 @@ extern void ic0_debug_print(int32_t src, int32_t size);
 extern void ic0_trap(int32_t src, int32_t size);
 
 /* Forward declarations from Idris2 generated code */
-extern void* __mainExpression_0(void);  /* Idris2 main entry */
+extern void* __mainExpression_0(void);  /* Idris2 main entry - returns IO closure */
+extern void* idris2_trampoline(void*);  /* Execute Idris2 closure (from RefC runtime) */
+
+/* Forward declarations from ic0_stubs.c (FFI bridge) */
+extern void ouc_c_set_arg_i32(int32_t index, int32_t value);
+extern int32_t ouc_c_get_result_i32(void);
+extern void ouc_reset_ffi(void);
+extern int64_t ouc_get_auditor_count(void);  /* Direct access for debugging */
+
+/* Command constants (must match Main.idr) */
+/* Query commands (0-9) */
+#define CMD_INIT               0
+#define CMD_GET_VERSION        1
+#define CMD_GET_PROPOSAL_COUNT 2
+#define CMD_GET_AUDITOR_COUNT  3
+/* Update commands (10+) */
+#define CMD_REGISTER_AUDITOR   10
+#define CMD_SUSPEND_AUDITOR    11
+#define CMD_REACTIVATE_AUDITOR 12
+
+/* Call Idris2 with a command and return the result */
+static int32_t call_idris2(int32_t cmd) {
+    ouc_reset_ffi();
+    ouc_c_set_arg_i32(0, cmd);
+    /* __mainExpression_0 returns an IO closure, idris2_trampoline executes it */
+    void* closure = __mainExpression_0();
+    idris2_trampoline(closure);
+    return ouc_c_get_result_i32();
+}
 
 /* =============================================================================
  * Helper Functions
@@ -91,8 +119,12 @@ static void reply_candid_null(void) {
 __attribute__((used, visibility("default"), export_name("canister_init")))
 void canister_init(void) {
     debug("OUC: canister_init");
-    __mainExpression_0();
-    debug("OUC: initialized");
+    int32_t result = call_idris2(CMD_INIT);
+    if (result == 1) {
+        debug("OUC: initialized successfully");
+    } else {
+        debug("OUC: initialization failed");
+    }
 }
 
 __attribute__((used, visibility("default"), export_name("canister_pre_upgrade")))
@@ -104,8 +136,14 @@ void canister_pre_upgrade(void) {
 __attribute__((used, visibility("default"), export_name("canister_post_upgrade")))
 void canister_post_upgrade(void) {
     debug("OUC: canister_post_upgrade");
-    __mainExpression_0();
-    /* TODO: Deserialize OUCState from stable memory */
+    /* Re-initialize state using CMD_INIT
+     * TODO: Deserialize OUCState from stable memory instead of reinitializing */
+    int32_t result = call_idris2(CMD_INIT);
+    if (result == 1) {
+        debug("OUC: post_upgrade initialized state");
+    } else {
+        debug("OUC: post_upgrade state init failed");
+    }
 }
 
 /* =============================================================================
@@ -177,19 +215,23 @@ void canister_query_getOwner(void) {
 __attribute__((used, visibility("default"), export_name("canister_query getVersion")))
 void canister_query_getVersion(void) {
     debug("OUC: getVersion");
-    reply_candid_nat(1);
+    int32_t version = call_idris2(CMD_GET_VERSION);
+    reply_candid_nat((uint64_t)version);
 }
 
 __attribute__((used, visibility("default"), export_name("canister_query getProposalCount")))
 void canister_query_getProposalCount(void) {
     debug("OUC: getProposalCount");
-    reply_candid_nat(0);
+    int32_t count = call_idris2(CMD_GET_PROPOSAL_COUNT);
+    reply_candid_nat((uint64_t)count);
 }
 
 __attribute__((used, visibility("default"), export_name("canister_query getAuditorCount")))
 void canister_query_getAuditorCount(void) {
     debug("OUC: getAuditorCount");
-    reply_candid_nat(0);
+    /* Bypass Idris2 FFI read bug - call C directly */
+    int64_t count = ouc_get_auditor_count();
+    reply_candid_nat((uint64_t)count);
 }
 
 /* =============================================================================
@@ -212,19 +254,54 @@ void canister_update_cancelProposal(void) {
 __attribute__((used, visibility("default"), export_name("canister_update registerAuditor")))
 void canister_update_registerAuditor(void) {
     debug("OUC: registerAuditor");
-    reply_candid_text("registerAuditor: not yet implemented");
+    int32_t result = call_idris2(CMD_REGISTER_AUDITOR);
+    /* Debug: Read count directly from C (bypasses Idris2) */
+    int64_t count = ouc_get_auditor_count();
+    /* Create response with count for debugging */
+    char buf[64] = "registered:";
+    int len = 11;
+    if (result == 1) {
+        buf[len++] = 'o'; buf[len++] = 'k';
+    } else if (result == 0) {
+        buf[len++] = 'e'; buf[len++] = 'x'; buf[len++] = 'i'; buf[len++] = 's'; buf[len++] = 't'; buf[len++] = 's';
+    } else {
+        buf[len++] = 'e'; buf[len++] = 'r'; buf[len++] = 'r';
+    }
+    buf[len++] = ','; buf[len++] = 'c'; buf[len++] = 'n'; buf[len++] = 't'; buf[len++] = '=';
+    if (count >= 10) buf[len++] = '0' + (char)((count / 10) % 10);
+    buf[len++] = '0' + (char)(count % 10);
+    buf[len] = '\0';
+    reply_candid_text(buf);
 }
 
 __attribute__((used, visibility("default"), export_name("canister_update suspendAuditor")))
 void canister_update_suspendAuditor(void) {
     debug("OUC: suspendAuditor");
-    reply_candid_text("suspendAuditor: not yet implemented");
+    /* TODO: Parse auditor index from Candid args and set in arg[1] */
+    ouc_c_set_arg_i32(1, 0);  /* For now, suspend index 0 */
+    int32_t result = call_idris2(CMD_SUSPEND_AUDITOR);
+    if (result == 1) {
+        reply_candid_text("auditor suspended");
+    } else if (result == 0) {
+        reply_candid_text("auditor not found");
+    } else {
+        reply_candid_text("error: suspension failed");
+    }
 }
 
 __attribute__((used, visibility("default"), export_name("canister_update reactivateAuditor")))
 void canister_update_reactivateAuditor(void) {
     debug("OUC: reactivateAuditor");
-    reply_candid_text("reactivateAuditor: not yet implemented");
+    /* TODO: Parse auditor index from Candid args and set in arg[1] */
+    ouc_c_set_arg_i32(1, 0);  /* For now, reactivate index 0 */
+    int32_t result = call_idris2(CMD_REACTIVATE_AUDITOR);
+    if (result == 1) {
+        reply_candid_text("auditor reactivated");
+    } else if (result == 0) {
+        reply_candid_text("auditor not found");
+    } else {
+        reply_candid_text("error: reactivation failed");
+    }
 }
 
 __attribute__((used, visibility("default"), export_name("canister_update assignAuditor")))

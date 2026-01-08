@@ -19,13 +19,13 @@ import Data.Nat
 safeMod : Nat -> Nat -> Nat
 safeMod n m = case m of
   Z => 0
-  S k => modNatNZ n (S k) SIsNonZero
+  S k => modNatNZ n (S k) ItIsSucc
 
 -- Helper for safe div (returns 0 if divisor is 0)
 safeDiv : Nat -> Nat -> Nat
 safeDiv n m = case m of
   Z => 0
-  S k => divNatNZ n (S k) SIsNonZero
+  S k => divNatNZ n (S k) ItIsSucc
 
 -- Helper: safe index lookup for list
 safeIndex : Nat -> List a -> Maybe a

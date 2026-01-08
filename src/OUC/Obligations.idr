@@ -81,34 +81,7 @@ ostateModified : OFR [StateModified] ()
 ostateModified = gmodifyState
 
 -- =============================================================================
--- Composite Operations
--- =============================================================================
-
-||| Full EVM RPC request with cycles
-||| Type shows: HTTP call + cycles consumed
-public export
-oevmRpcRequest : (endpoint : String) -> OFR [HttpCall endpoint, CyclesConsumed HttpOutcallCycles] ()
-oevmRpcRequest endpoint = GFR.do
-  ghttpCall endpoint
-  gconsumeCycles HttpOutcallCycles
-
-||| State-modifying operation with cycles
-public export
-ostateUpdate : (cycles : Nat) -> OFR [StateModified, CyclesConsumed cycles] ()
-ostateUpdate cycles = GFR.do
-  gmodifyState
-  gconsumeCycles cycles
-
-||| Inter-canister call with cycles
-public export
-ointerCanisterCall : (target : String) -> (cycles : Nat)
-                  -> OFR [ExternalCall target, CyclesConsumed cycles] ()
-ointerCanisterCall target cycles = GFR.do
-  gexternalCall target
-  gconsumeCycles cycles
-
--- =============================================================================
--- EVM Transaction Operations
+-- EVM Transaction Operations - Obligation Type Declarations
 -- =============================================================================
 
 ||| EVM transaction send obligations
@@ -120,14 +93,6 @@ EvmTxObligations rpcEndpoint =
   , CyclesConsumed HttpOutcallCycles
   , StateModified
   ]
-
-||| Record EVM transaction send
-public export
-oevmTxSend : (rpcEndpoint : String) -> OFR (EvmTxObligations rpcEndpoint) ()
-oevmTxSend endpoint = GFR.do
-  ghttpCall endpoint
-  gconsumeCycles HttpOutcallCycles
-  gmodifyState
 
 ||| EVM transaction confirmation polling obligations
 ||| Multiple RPC calls for confirmation
@@ -156,16 +121,6 @@ UpgradeExecObligations rpcEndpoint =
   , StateModified                     -- Record result
   ]
 
-||| Record upgrade execution start
-public export
-oupgradeExec : (rpcEndpoint : String) -> OFR (UpgradeExecObligations rpcEndpoint) ()
-oupgradeExec endpoint = GFR.do
-  ghttpCall endpoint                  -- send tx
-  ghttpCall endpoint                  -- poll 1
-  ghttpCall endpoint                  -- poll 2
-  gconsumeCycles (HttpOutcallCycles * 3)
-  gmodifyState
-
 -- =============================================================================
 -- Multi-Chain Operations
 -- =============================================================================
@@ -179,20 +134,13 @@ MultiChainObligations endpoints =
   ++ [StateModified]
 
 -- =============================================================================
--- Obligation Analysis
+-- Obligation Analysis (using re-exported functions from FRMonad.Graded)
 -- =============================================================================
 
 ||| Estimate total cycles from obligations
 public export
 estimateCycles : Obligations -> Nat
 estimateCycles = totalCyclesConsumed
-
-||| Count HTTP calls from obligations
-public export
-countHttpCalls : Obligations -> Nat
-countHttpCalls [] = 0
-countHttpCalls (HttpCall _ :: xs) = 1 + countHttpCalls xs
-countHttpCalls (_ :: xs) = countHttpCalls xs
 
 ||| Check if obligations include state modification
 public export
@@ -218,14 +166,16 @@ ovalidateCycles available required =
 ||| Validate obligations against canister limits
 public export
 ovalidateObligations : Obligations -> Nat -> OFR [] ()
-ovalidateObligations obs maxCycles = do
+ovalidateObligations obs maxCycles =
   let required = estimateCycles obs
-  gguard (required <= maxCycles)
-         (InsufficientCycles required ("Obligations require " ++ show required ++ " cycles"))
-  let httpCount = countHttpCalls obs
-  gguard (httpCount <= 100)
-         (ValidationError $ "Too many HTTP calls: " ++ show httpCount)
-  gpure ()
+      httpCount = FRMonad.Graded.countHttpCalls obs
+  in if required > maxCycles
+       then GFail (InsufficientCycles required ("Obligations require " ++ show required ++ " cycles"))
+                  (mkEvidence Update "validateObligations" "Cycles exceeded")
+       else if httpCount > 100
+              then GFail (ValidationError $ "Too many HTTP calls: " ++ show httpCount)
+                         (mkEvidence Update "validateObligations" "HTTP calls exceeded")
+              else gpure ()
 
 -- =============================================================================
 -- Type-level Obligation Proofs
@@ -263,3 +213,10 @@ ovalidateObligations obs maxCycles = do
 
 -- Example: Multi-step with accumulated obligations
 -- fullFlow : OFR [StateModified, HttpCall "rpc1", HttpCall "rpc2", CyclesConsumed 200B] ()
+
+-- =============================================================================
+-- Note: Composite operations that sequence multiple obligation types
+-- require an accumulating bind implementation. For now, use the type
+-- signatures above to document obligations, and implement the actual
+-- operations when a proper accumulating graded monad is available.
+-- =============================================================================

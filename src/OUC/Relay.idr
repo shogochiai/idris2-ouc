@@ -25,7 +25,7 @@ import Util.StringHex as SHex
 
 -- Safe division helper
 safeDiv10 : Nat -> Nat
-safeDiv10 n = divNatNZ n 10 SIsNonZero
+safeDiv10 n = divNatNZ n 10 ItIsSucc
 
 -- =============================================================================
 -- Decision Encoding

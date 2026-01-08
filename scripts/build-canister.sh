@@ -35,15 +35,36 @@ cd "$PROJECT_DIR"
 
 # Use RefC codegen to produce C code
 # Note: We need to compile Main.idr which imports the entire OUC module tree
-idris2 --codegen refc \
-    --build-dir "$BUILD_DIR/idris" \
-    -p contrib \
-    --source-dir src \
-    -o main \
-    src/Main.idr 2>&1 || {
-    echo "RefC compilation failed"
-    exit 1
-}
+# Strategy: Use pack's installed idris2 directly (it has correct IDRIS2_PACKAGE_PATH)
+# If pack is available, get package path from pack, else fall back to direct invocation
+
+if command -v pack >/dev/null 2>&1; then
+    echo "Using pack's idris2 wrapper with automatic package management"
+    # pack's idris2 wrapper automatically sets IDRIS2_PACKAGE_PATH
+    # Just invoke idris2 directly - the wrapper handles packages
+    idris2 --codegen refc \
+        --build-dir "$BUILD_DIR/idris" \
+        -p contrib \
+        -p idris2-cdk \
+        --source-dir src \
+        -o main \
+        src/Main.idr 2>&1 || {
+        echo "RefC compilation failed"
+        exit 1
+    }
+else
+    echo "pack not found, using direct idris2 invocation"
+    idris2 --codegen refc \
+        --build-dir "$BUILD_DIR/idris" \
+        -p contrib \
+        -p idris2-cdk \
+        --source-dir src \
+        -o main \
+        src/Main.idr 2>&1 || {
+        echo "RefC compilation failed"
+        exit 1
+    }
+fi
 
 # Find generated C file
 C_FILE=$(find "$BUILD_DIR/idris" -name "*.c" | head -1)
@@ -54,15 +75,48 @@ fi
 echo "Generated: $C_FILE"
 
 # =============================================================================
+# Step 1.5: Inject FFI forward declarations into generated C file
+# =============================================================================
+echo ">>> Step 1.5: Injecting FFI declarations"
+
+# The Idris2 RefC backend generates C code that calls FFI functions without declarations.
+# Without proper declarations, C assumes int return/parameters, causing calling convention
+# mismatch with our int64_t functions. We inject declarations at the top of the file.
+FFI_DECLARATIONS='/* OUC FFI Forward Declarations (injected by build-canister.sh) */
+#include <stdint.h>
+void ouc_set_result_i32(int64_t value);
+int64_t ouc_get_arg_i32(int64_t index);
+/* End OUC FFI Declarations */
+'
+
+# Create temp file with declarations prepended
+echo "$FFI_DECLARATIONS" > "$BUILD_DIR/ffi_header.h"
+cat "$BUILD_DIR/ffi_header.h" "$C_FILE" > "$BUILD_DIR/main_patched.c"
+mv "$BUILD_DIR/main_patched.c" "$C_FILE"
+echo "Injected FFI declarations into $C_FILE"
+
+# =============================================================================
 # Step 2: Download RefC runtime dependencies
 # =============================================================================
 echo ">>> Step 2: Prepare RefC runtime"
 
 # Idris2 RefC runtime location
 IDRIS2_VERSION="${IDRIS2_VERSION:-0.8.0}"
-IDRIS2_SUPPORT="${IDRIS2_PREFIX}/idris2-${IDRIS2_VERSION}/support"
-REFC_SUPPORT="$IDRIS2_SUPPORT/refc"
-C_SUPPORT="$IDRIS2_SUPPORT/c"
+# Try pack installation path first, then standard path
+PACK_SUPPORT=$(find "$HOME/.local/state/pack/install" -path "*/idris2-${IDRIS2_VERSION}/support/refc" -type d 2>/dev/null | head -1)
+if [ -n "$PACK_SUPPORT" ]; then
+    REFC_SUPPORT="$PACK_SUPPORT"
+    C_SUPPORT="$(dirname "$PACK_SUPPORT")/c"
+    echo "Using pack Idris2 support: $REFC_SUPPORT"
+elif [ -d "${IDRIS2_PREFIX}/idris2-${IDRIS2_VERSION}/support/refc" ]; then
+    REFC_SUPPORT="${IDRIS2_PREFIX}/idris2-${IDRIS2_VERSION}/support/refc"
+    C_SUPPORT="${IDRIS2_PREFIX}/idris2-${IDRIS2_VERSION}/support/c"
+    echo "Using standard Idris2 support: $REFC_SUPPORT"
+else
+    echo "Warning: Local Idris2 support not found, will download"
+    REFC_SUPPORT=""
+    C_SUPPORT=""
+fi
 
 # If local support doesn't exist, download from GitHub
 REFC_SRC="/tmp/refc-src"
@@ -71,10 +125,15 @@ MINI_GMP="/tmp/mini-gmp"
 if [ ! -f "$REFC_SRC/runtime.c" ]; then
     echo "Downloading RefC runtime sources..."
     mkdir -p "$REFC_SRC"
+    # Download C source files
     for f in memoryManagement.c runtime.c stringOps.c mathFunctions.c casts.c clock.c buffer.c prim.c refc_util.c; do
         curl -sLo "$REFC_SRC/$f" "https://raw.githubusercontent.com/idris-lang/Idris2/main/support/refc/$f"
     done
-    for f in idris_support.c idris_file.c idris_directory.c idris_util.c; do
+    # Download header files
+    for f in runtime.h cBackend.h datatypes.h _datatypes.h refc_util.h mathFunctions.h memoryManagement.h stringOps.h casts.h clock.h buffer.h prim.h threads.h; do
+        curl -sLo "$REFC_SRC/$f" "https://raw.githubusercontent.com/idris-lang/Idris2/main/support/refc/$f"
+    done
+    for f in idris_support.c idris_file.c idris_directory.c idris_util.c idris_support.h idris_file.h idris_directory.h idris_util.h; do
         curl -sLo "$REFC_SRC/$f" "https://raw.githubusercontent.com/idris-lang/Idris2/main/support/c/$f"
     done
 fi
@@ -103,14 +162,10 @@ static inline void mpz_clears(mpz_t x, ...) {
 GMPEOF
 fi
 
-# Use local or downloaded sources
-if [ -d "$REFC_SUPPORT" ]; then
-    REFC_INCLUDE="$REFC_SUPPORT"
-    C_INCLUDE="$C_SUPPORT"
-else
-    REFC_INCLUDE="$REFC_SRC"
-    C_INCLUDE="$REFC_SRC"
-fi
+# Always use downloaded sources to avoid version mismatch between local install and downloaded C files
+# This ensures headers and C files come from the same version
+REFC_INCLUDE="$REFC_SRC"
+C_INCLUDE="$REFC_SRC"
 
 # Minimal RefC files for canister (no file I/O to avoid WASI)
 REFC_C_FILES="$REFC_SRC/runtime.c $REFC_SRC/memoryManagement.c $REFC_SRC/stringOps.c $REFC_SRC/mathFunctions.c $REFC_SRC/casts.c $REFC_SRC/prim.c $REFC_SRC/refc_util.c"
@@ -120,15 +175,19 @@ REFC_C_FILES="$REFC_SRC/runtime.c $REFC_SRC/memoryManagement.c $REFC_SRC/stringO
 # =============================================================================
 echo ">>> Step 3: C → WASM (Emscripten)"
 
-emcc "$C_FILE" \
+# IMPORTANT: mini-gmp must be included BEFORE refc headers since _datatypes.h includes <gmp.h>
+# Clear CPATH/CPLUS_INCLUDE_PATH to avoid macOS SDK C++ header conflicts with Emscripten
+# Use -include to force-include FFI header before Idris2-generated code (which lacks #include for FFI functions)
+CPATH= CPLUS_INCLUDE_PATH= emcc "$C_FILE" \
     $REFC_C_FILES \
     "$MINI_GMP/mini-gmp.c" \
     "$IC0_SUPPORT/ic0_stubs.c" \
     "$IC0_SUPPORT/canister_entry.c" \
     "$IC0_SUPPORT/wasi_stubs.c" \
+    -include "$IC0_SUPPORT/ic0_ouc_ffi.h" \
+    -I"$MINI_GMP" \
     -I"$REFC_INCLUDE" \
     -I"$C_INCLUDE" \
-    -I"$MINI_GMP" \
     -I"$IC0_SUPPORT" \
     -o "$BUILD_DIR/ouc.wasm" \
     -s STANDALONE_WASM=1 \

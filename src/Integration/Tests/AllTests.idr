@@ -2,7 +2,6 @@
 ||| These tests exercise full pipelines for OUC to maximize semantic coverage
 module Integration.Tests.AllTests
 
-import Idris2CoverageHelper.PerModule
 import FRMonad.Core
 import OUC.Core
 import AuditorPool.Core
@@ -12,6 +11,37 @@ import Data.List
 import Data.String
 
 %default covering
+
+-- =============================================================================
+-- Test Infrastructure (local definitions to avoid LazyCore dependency)
+-- =============================================================================
+
+||| Test definition record
+public export
+record TestDef where
+  constructor MkTestDef
+  testId   : String
+  testName : String
+  testFn   : IO Bool
+
+||| Create a test definition
+public export
+test : String -> String -> IO Bool -> TestDef
+test = MkTestDef
+
+runOne : TestDef -> IO Bool
+runOne t = do
+  result <- t.testFn
+  putStrLn $ (if result then "[PASS]" else "[FAIL]") ++ " " ++ t.testId ++ ": " ++ t.testName
+  pure result
+
+||| Run a test suite and report results
+export
+runTestSuite : String -> List TestDef -> IO ()
+runTestSuite suiteName tests = do
+  putStrLn $ "Running " ++ suiteName ++ " tests..."
+  results <- traverse runOne tests
+  putStrLn $ "\n" ++ show (length (filter id results)) ++ "/" ++ show (length results) ++ " tests passed"
 
 -- =============================================================================
 -- Test Helpers
@@ -396,6 +426,428 @@ test_getAwaitingReview_excludeApproved = do
               in pure (null awaiting)
 
 -- =============================================================================
+-- AuditorPool Tests (HIGH IMPACT - previously untested)
+-- =============================================================================
+
+testAuditorPrincipal : ICPrincipal
+testAuditorPrincipal = MkICPrincipal "aaaaa-aa"
+
+testAuditorPrincipal2 : ICPrincipal
+testAuditorPrincipal2 = MkICPrincipal "bbbbb-bb"
+
+testPoolConfig : PoolConfig
+testPoolConfig = defaultConfig
+
+||| INT_POOL_001: registerAuditor with sufficient stake succeeds
+test_registerAuditor_success : IO Bool
+test_registerAuditor_success = do
+  case registerAuditor [] testAuditorPrincipal 1500 baseTime testPoolConfig of
+    Ok (auditors, aid) _ =>
+      pure (length auditors == 1 && aid == MkAuditorId testAuditorPrincipal)
+    Fail _ _ => pure False
+
+||| INT_POOL_002: registerAuditor with insufficient stake fails
+test_registerAuditor_insufficientStake : IO Bool
+test_registerAuditor_insufficientStake = do
+  case registerAuditor [] testAuditorPrincipal 500 baseTime testPoolConfig of
+    Fail (Unauthorized _) _ => pure True
+    _ => pure False
+
+||| INT_POOL_003: registerAuditor duplicate fails
+test_registerAuditor_duplicate : IO Bool
+test_registerAuditor_duplicate = do
+  case registerAuditor [] testAuditorPrincipal 1500 baseTime testPoolConfig of
+    Fail _ _ => pure False
+    Ok (auditors, _) _ =>
+      case registerAuditor auditors testAuditorPrincipal 1500 baseTime testPoolConfig of
+        Fail (Conflict _) _ => pure True
+        _ => pure False
+
+||| INT_POOL_004: selectAuditor ByReputation
+test_selectAuditor_byReputation : IO Bool
+test_selectAuditor_byReputation = do
+  let auditor1 = MkAuditor (MkAuditorId testAuditorPrincipal) Active 600 0 0 0 0 1500 baseTime
+  let auditor2 = MkAuditor (MkAuditorId testAuditorPrincipal2) Active 800 0 0 0 0 1500 baseTime
+  case selectAuditor [auditor1, auditor2] ByReputation testPoolConfig of
+    Ok selectedId _ => pure (selectedId == MkAuditorId testAuditorPrincipal2)
+    Fail _ _ => pure False
+
+||| INT_POOL_005: selectAuditor ByAvailability
+test_selectAuditor_byAvailability : IO Bool
+test_selectAuditor_byAvailability = do
+  let auditor1 = MkAuditor (MkAuditorId testAuditorPrincipal) Active 600 10 0 0 0 1500 baseTime
+  let auditor2 = MkAuditor (MkAuditorId testAuditorPrincipal2) Active 600 2 0 0 0 1500 baseTime
+  case selectAuditor [auditor1, auditor2] ByAvailability testPoolConfig of
+    Ok selectedId _ => pure (selectedId == MkAuditorId testAuditorPrincipal2)
+    Fail _ _ => pure False
+
+||| INT_POOL_006: selectAuditor with no active auditors fails
+test_selectAuditor_noAuditors : IO Bool
+test_selectAuditor_noAuditors = do
+  case selectAuditor [] ByReputation testPoolConfig of
+    Fail (NotFound _) _ => pure True
+    _ => pure False
+
+||| INT_POOL_007: selectAuditor Weighted
+test_selectAuditor_weighted : IO Bool
+test_selectAuditor_weighted = do
+  let auditor1 = MkAuditor (MkAuditorId testAuditorPrincipal) Active 600 0 0 0 0 1000 baseTime
+  let auditor2 = MkAuditor (MkAuditorId testAuditorPrincipal2) Active 700 0 0 0 0 2000 baseTime
+  case selectAuditor [auditor1, auditor2] Weighted testPoolConfig of
+    Ok selectedId _ => pure (selectedId == MkAuditorId testAuditorPrincipal2)
+    Fail _ _ => pure False
+
+||| INT_POOL_008: slashAuditor success
+test_slashAuditor_success : IO Bool
+test_slashAuditor_success = do
+  let auditor = MkAuditor (MkAuditorId testAuditorPrincipal) Active 600 0 0 0 0 1000 baseTime
+  case slashAuditor [auditor] (MkAuditorId testAuditorPrincipal) "misbehavior" testPoolConfig of
+    Ok (auditors, slashedAmount) _ =>
+      case auditors of
+        [a] => pure (a.status == Slashed && slashedAmount == 100)
+        _ => pure False
+    Fail _ _ => pure False
+
+||| INT_POOL_009: slashAuditor not found
+test_slashAuditor_notFound : IO Bool
+test_slashAuditor_notFound = do
+  case slashAuditor [] (MkAuditorId testAuditorPrincipal) "reason" testPoolConfig of
+    Fail (NotFound _) _ => pure True
+    _ => pure False
+
+||| INT_POOL_010: suspendAuditor success
+test_suspendAuditor_success : IO Bool
+test_suspendAuditor_success = do
+  let auditor = MkAuditor (MkAuditorId testAuditorPrincipal) Active 600 0 0 0 0 1000 baseTime
+  case suspendAuditor [auditor] (MkAuditorId testAuditorPrincipal) "violation" of
+    Ok auditors _ =>
+      case auditors of
+        [a] => pure (a.status == Suspended)
+        _ => pure False
+    Fail _ _ => pure False
+
+||| INT_POOL_011: reactivateAuditor from Suspended
+test_reactivateAuditor_suspended : IO Bool
+test_reactivateAuditor_suspended = do
+  let auditor = MkAuditor (MkAuditorId testAuditorPrincipal) Suspended 600 0 0 0 0 1000 baseTime
+  case reactivateAuditor [auditor] (MkAuditorId testAuditorPrincipal) of
+    Ok auditors _ =>
+      case auditors of
+        [a] => pure (a.status == Active)
+        _ => pure False
+    Fail _ _ => pure False
+
+||| INT_POOL_012: reactivateAuditor from Slashed fails
+test_reactivateAuditor_slashed : IO Bool
+test_reactivateAuditor_slashed = do
+  let auditor = MkAuditor (MkAuditorId testAuditorPrincipal) Slashed 600 0 0 0 1 500 baseTime
+  case reactivateAuditor [auditor] (MkAuditorId testAuditorPrincipal) of
+    Fail (InvalidState _) _ => pure True
+    _ => pure False
+
+||| INT_POOL_013: updateReputation positive delta
+test_updateReputation_positive : IO Bool
+test_updateReputation_positive = do
+  let auditor = MkAuditor (MkAuditorId testAuditorPrincipal) Active 600 0 0 0 0 1000 baseTime
+  case updateReputation [auditor] (MkAuditorId testAuditorPrincipal) 50 of
+    Ok auditors _ =>
+      case auditors of
+        [a] => pure (a.reputation == 650)
+        _ => pure False
+    Fail _ _ => pure False
+
+||| INT_POOL_014: updateReputation negative delta
+test_updateReputation_negative : IO Bool
+test_updateReputation_negative = do
+  let auditor = MkAuditor (MkAuditorId testAuditorPrincipal) Active 600 0 0 0 0 1000 baseTime
+  case updateReputation [auditor] (MkAuditorId testAuditorPrincipal) (-100) of
+    Ok auditors _ =>
+      case auditors of
+        [a] => pure (a.reputation == 500)
+        _ => pure False
+    Fail _ _ => pure False
+
+||| INT_POOL_015: updateReputation caps at 1000
+test_updateReputation_cap : IO Bool
+test_updateReputation_cap = do
+  let auditor = MkAuditor (MkAuditorId testAuditorPrincipal) Active 950 0 0 0 0 1000 baseTime
+  case updateReputation [auditor] (MkAuditorId testAuditorPrincipal) 100 of
+    Ok auditors _ =>
+      case auditors of
+        [a] => pure (a.reputation == 1000)
+        _ => pure False
+    Fail _ _ => pure False
+
+-- =============================================================================
+-- Rewards.Core Tests (HIGH IMPACT - previously untested)
+-- =============================================================================
+
+testRewardsConfig : RewardsConfig
+testRewardsConfig = defaultRewardsConfig
+
+||| INT_RWD_001: collectFee with sufficient amount succeeds
+test_collectFee_success : IO Bool
+test_collectFee_success = do
+  let state0 = initialRewardsState testRewardsConfig
+      pid = MkProposalId 1
+  case collectFee state0 pid testPrincipal 100 baseTime of
+    Ok state1 _ =>
+      pure (length state1.fees == 1 && state1.treasury.totalCollected == 100)
+    Fail _ _ => pure False
+
+||| INT_RWD_002: collectFee with insufficient amount fails
+test_collectFee_insufficient : IO Bool
+test_collectFee_insufficient = do
+  let state0 = initialRewardsState testRewardsConfig
+      pid = MkProposalId 1
+  case collectFee state0 pid testPrincipal 50 baseTime of
+    Fail (Unauthorized _) _ => pure True
+    _ => pure False
+
+||| INT_RWD_003: queueReward with existing fee succeeds
+test_queueReward_success : IO Bool
+test_queueReward_success = do
+  let state0 = initialRewardsState testRewardsConfig
+      pid = MkProposalId 1
+      aid = MkAuditorId testPrincipal
+  case collectFee state0 pid testPrincipal 100 baseTime of
+    Fail _ _ => pure False
+    Ok state1 _ =>
+      case queueReward state1 aid pid True True of
+        Ok state2 _ => pure (length state2.pendingRewards == 1)
+        Fail _ _ => pure False
+
+||| INT_RWD_004: queueReward without fee fails
+test_queueReward_noFee : IO Bool
+test_queueReward_noFee = do
+  let state0 = initialRewardsState testRewardsConfig
+      pid = MkProposalId 99
+      aid = MkAuditorId testPrincipal
+  case queueReward state0 aid pid False False of
+    Fail (NotFound _) _ => pure True
+    _ => pure False
+
+||| INT_RWD_005: distributeReward with pending reward succeeds
+||| Note: With default config, 80% goes to auditor, 20% to treasury
+||| Treasury must have enough to pay reward. Collect multiple fees first.
+test_distributeReward_success : IO Bool
+test_distributeReward_success = do
+  let state0 = initialRewardsState testRewardsConfig
+      pid1 = MkProposalId 1
+      pid2 = MkProposalId 2
+      pid3 = MkProposalId 3
+      pid4 = MkProposalId 4
+      pid5 = MkProposalId 5
+      aid = MkAuditorId testPrincipal
+  -- Collect 5 fees (500 each) to build up treasury: 5 * 500 * 20% = 500
+  case collectFee state0 pid1 testPrincipal 500 baseTime of
+    Fail _ _ => pure False
+    Ok state1 _ =>
+      case collectFee state1 pid2 testPrincipal 500 baseTime of
+        Fail _ _ => pure False
+        Ok state2 _ =>
+          case collectFee state2 pid3 testPrincipal 500 baseTime of
+            Fail _ _ => pure False
+            Ok state3 _ =>
+              case collectFee state3 pid4 testPrincipal 500 baseTime of
+                Fail _ _ => pure False
+                Ok state4 _ =>
+                  case collectFee state4 pid5 testPrincipal 500 baseTime of
+                    Fail _ _ => pure False
+                    Ok state5 _ =>
+                      -- Now treasury has 500. Queue reward for pid1 (400 = 80% of 500)
+                      case queueReward state5 aid pid1 False False of
+                        Fail _ _ => pure False
+                        Ok state6 _ =>
+                          case distributeReward state6 aid pid1 "0xtxhash" (baseTime + 1000) of
+                            Ok (state7, amount) _ =>
+                              pure (length state7.distributions == 1 && length state7.pendingRewards == 0)
+                            Fail _ _ => pure False
+
+||| INT_RWD_006: distributeReward with no pending fails
+test_distributeReward_noPending : IO Bool
+test_distributeReward_noPending = do
+  let state0 = initialRewardsState testRewardsConfig
+      aid = MkAuditorId testPrincipal
+      pid = MkProposalId 99
+  case distributeReward state0 aid pid "0xtx" baseTime of
+    Fail (NotFound _) _ => pure True
+    _ => pure False
+
+||| INT_RWD_007: getPendingReward returns correct sum
+test_getPendingReward : IO Bool
+test_getPendingReward = do
+  let state0 = initialRewardsState testRewardsConfig
+      pid1 = MkProposalId 1
+      pid2 = MkProposalId 2
+      aid = MkAuditorId testPrincipal
+  case collectFee state0 pid1 testPrincipal 100 baseTime of
+    Fail _ _ => pure False
+    Ok state1 _ =>
+      case collectFee state1 pid2 testPrincipal 100 baseTime of
+        Fail _ _ => pure False
+        Ok state2 _ =>
+          case queueReward state2 aid pid1 False False of
+            Fail _ _ => pure False
+            Ok state3 _ =>
+              case queueReward state3 aid pid2 False False of
+                Fail _ _ => pure False
+                Ok state4 _ =>
+                  case getPendingReward state4 aid of
+                    Ok pendingTotal _ => pure (pendingTotal > 0)
+                    Fail _ _ => pure False
+
+||| INT_RWD_008: getTreasuryBalance returns correct value
+test_getTreasuryBalance : IO Bool
+test_getTreasuryBalance = do
+  let state0 = initialRewardsState testRewardsConfig
+      pid = MkProposalId 1
+  case collectFee state0 pid testPrincipal 100 baseTime of
+    Fail _ _ => pure False
+    Ok state1 _ =>
+      case getTreasuryBalance state1 of
+        Ok balance _ => pure (balance == 20)  -- 20% treasury share
+        Fail _ _ => pure False
+
+||| INT_RWD_009: calculateReward with bonuses
+test_calculateReward_bonuses : IO Bool
+test_calculateReward_bonuses = do
+  let config = testRewardsConfig
+      baseReward = calculateReward config 100 False False
+      withQuality = calculateReward config 100 True False
+      withSpeed = calculateReward config 100 False True
+      withBoth = calculateReward config 100 True True
+  pure (withQuality > baseReward &&
+        withSpeed > baseReward &&
+        withBoth > withQuality &&
+        withBoth > withSpeed)
+
+-- =============================================================================
+-- Proposals.Core Tests (validateProposal, countByStatus)
+-- =============================================================================
+
+testChainConfig : ChainConfig
+testChainConfig = MkChainConfig testChain testOU testTarget "https://rpc.example.com" True
+
+testInactiveChainConfig : ChainConfig
+testInactiveChainConfig = MkChainConfig (MkChainId 137) testOU testTarget "https://rpc.polygon.com" False
+
+||| INT_VAL_001: validateProposal with valid chain succeeds
+test_validateProposal_valid : IO Bool
+test_validateProposal_valid = do
+  let state0 = initialState testPrincipal
+      expiresAt = baseTime + 86400000000000
+  case submitProposal state0 testChain testTarget testNewImpl testOU testPrincipal "Test" "0x1" baseTime of
+    Fail _ _ => pure False
+    Ok (state1, pid) _ =>
+      case findProposal state1 pid of
+        Fail _ _ => pure False
+        Ok proposal _ =>
+          case validateProposal proposal [testChainConfig] baseTime of
+            Ok Valid _ => pure True
+            Ok other _ => do
+              putStrLn $ "Expected Valid but got " ++ show other
+              pure False
+            Fail _ _ => pure False
+
+||| INT_VAL_002: validateProposal with unknown chain fails
+test_validateProposal_unknownChain : IO Bool
+test_validateProposal_unknownChain = do
+  let state0 = initialState testPrincipal
+      unknownChain = MkChainId 999
+  case submitProposal state0 unknownChain testTarget testNewImpl testOU testPrincipal "Test" "0x1" baseTime of
+    Fail _ _ => pure False
+    Ok (state1, pid) _ =>
+      case findProposal state1 pid of
+        Fail _ _ => pure False
+        Ok proposal _ =>
+          case validateProposal proposal [testChainConfig] baseTime of
+            Ok (InvalidChain _) _ => pure True
+            _ => pure False
+
+||| INT_VAL_003: validateProposal with inactive chain fails
+test_validateProposal_inactiveChain : IO Bool
+test_validateProposal_inactiveChain = do
+  let state0 = initialState testPrincipal
+      inactiveChain = MkChainId 137
+  case submitProposal state0 inactiveChain testTarget testNewImpl testOU testPrincipal "Test" "0x1" baseTime of
+    Fail _ _ => pure False
+    Ok (state1, pid) _ =>
+      case findProposal state1 pid of
+        Fail _ _ => pure False
+        Ok proposal _ =>
+          case validateProposal proposal [testInactiveChainConfig] baseTime of
+            Ok (InvalidChain _) _ => pure True
+            _ => pure False
+
+||| INT_VAL_004: validateProposal with expired proposal
+||| Note: Proposal expiresAt is set to now + 604800000000000 (7 days in nanoseconds)
+test_validateProposal_expired : IO Bool
+test_validateProposal_expired = do
+  let state0 = initialState testPrincipal
+      futureTime = baseTime + 700000000000000  -- More than 7 days later
+  case submitProposal state0 testChain testTarget testNewImpl testOU testPrincipal "Test" "0x1" baseTime of
+    Fail _ _ => pure False
+    Ok (state1, pid) _ =>
+      case findProposal state1 pid of
+        Fail _ _ => pure False
+        Ok proposal _ =>
+          case validateProposal proposal [testChainConfig] futureTime of
+            Ok ExpiredProposal _ => pure True
+            _ => pure False
+
+||| INT_CNT_001: countByStatus with Pending
+test_countByStatus_pending : IO Bool
+test_countByStatus_pending = do
+  let state0 = initialState testPrincipal
+  case submitProposal state0 testChain testTarget testNewImpl testOU testPrincipal "Test1" "0x1" baseTime of
+    Fail _ _ => pure False
+    Ok (state1, _) _ =>
+      case submitProposal state1 testChain testTarget testNewImpl testOU testPrincipal "Test2" "0x2" baseTime of
+        Fail _ _ => pure False
+        Ok (state2, _) _ =>
+          pure (countByStatus state2 Pending == 2)
+
+||| INT_CNT_002: countByStatus with UnderReview
+test_countByStatus_underReview : IO Bool
+test_countByStatus_underReview = do
+  let state0 = initialState testPrincipal
+  case submitProposal state0 testChain testTarget testNewImpl testOU testPrincipal "Test" "0x1" baseTime of
+    Fail _ _ => pure False
+    Ok (state1, pid) _ =>
+      let aid = MkAuditorId testPrincipal
+      in case assignAuditor state1 pid aid baseTime of
+        Fail _ _ => pure False
+        Ok state2 _ =>
+          pure (countByStatus state2 UnderReview == 1 && countByStatus state2 Pending == 0)
+
+||| INT_CNT_003: countByStatus with Approved
+test_countByStatus_approved : IO Bool
+test_countByStatus_approved = do
+  let state0 = initialState testPrincipal
+  case submitProposal state0 testChain testTarget testNewImpl testOU testPrincipal "Test" "0x1" baseTime of
+    Fail _ _ => pure False
+    Ok (state1, pid) _ =>
+      let aid = MkAuditorId testPrincipal
+      in case assignAuditor state1 pid aid baseTime of
+        Fail _ _ => pure False
+        Ok state2 _ =>
+          case submitReview state2 pid aid ApproveUpgrade "ok" "sig" baseTime of
+            Fail _ _ => pure False
+            Ok state3 _ =>
+              pure (countByStatus state3 Approved == 1)
+
+||| INT_CNT_004: countByStatus with empty state
+test_countByStatus_empty : IO Bool
+test_countByStatus_empty = do
+  let state = initialState testPrincipal
+  pure (countByStatus state Pending == 0 &&
+        countByStatus state UnderReview == 0 &&
+        countByStatus state Approved == 0 &&
+        countByStatus state Rejected == 0 &&
+        countByStatus state Executed == 0)
+
+-- =============================================================================
 -- FRC Evidence Tests
 -- =============================================================================
 
@@ -445,6 +897,41 @@ allTests =
   -- getAwaitingReview tests (severity=2.0)
   , test "REQ_INT_AWAIT_001" "getAwaitingReview present" test_getAwaitingReview_present
   , test "REQ_INT_AWAIT_002" "getAwaitingReview excludes Approved" test_getAwaitingReview_excludeApproved
+  -- AuditorPool tests (HIGH IMPACT - previously untested)
+  , test "REQ_INT_POOL_001" "registerAuditor success" test_registerAuditor_success
+  , test "REQ_INT_POOL_002" "registerAuditor insufficient stake" test_registerAuditor_insufficientStake
+  , test "REQ_INT_POOL_003" "registerAuditor duplicate" test_registerAuditor_duplicate
+  , test "REQ_INT_POOL_004" "selectAuditor ByReputation" test_selectAuditor_byReputation
+  , test "REQ_INT_POOL_005" "selectAuditor ByAvailability" test_selectAuditor_byAvailability
+  , test "REQ_INT_POOL_006" "selectAuditor no auditors" test_selectAuditor_noAuditors
+  , test "REQ_INT_POOL_007" "selectAuditor Weighted" test_selectAuditor_weighted
+  , test "REQ_INT_POOL_008" "slashAuditor success" test_slashAuditor_success
+  , test "REQ_INT_POOL_009" "slashAuditor not found" test_slashAuditor_notFound
+  , test "REQ_INT_POOL_010" "suspendAuditor success" test_suspendAuditor_success
+  , test "REQ_INT_POOL_011" "reactivateAuditor from Suspended" test_reactivateAuditor_suspended
+  , test "REQ_INT_POOL_012" "reactivateAuditor from Slashed" test_reactivateAuditor_slashed
+  , test "REQ_INT_POOL_013" "updateReputation positive" test_updateReputation_positive
+  , test "REQ_INT_POOL_014" "updateReputation negative" test_updateReputation_negative
+  , test "REQ_INT_POOL_015" "updateReputation cap" test_updateReputation_cap
+  -- Rewards.Core tests (HIGH IMPACT - previously untested)
+  , test "REQ_INT_RWD_001" "collectFee success" test_collectFee_success
+  , test "REQ_INT_RWD_002" "collectFee insufficient" test_collectFee_insufficient
+  , test "REQ_INT_RWD_003" "queueReward success" test_queueReward_success
+  , test "REQ_INT_RWD_004" "queueReward no fee" test_queueReward_noFee
+  , test "REQ_INT_RWD_005" "distributeReward success" test_distributeReward_success
+  , test "REQ_INT_RWD_006" "distributeReward no pending" test_distributeReward_noPending
+  , test "REQ_INT_RWD_007" "getPendingReward sum" test_getPendingReward
+  , test "REQ_INT_RWD_008" "getTreasuryBalance" test_getTreasuryBalance
+  , test "REQ_INT_RWD_009" "calculateReward bonuses" test_calculateReward_bonuses
+  -- Proposals.Core tests (validateProposal, countByStatus)
+  , test "REQ_INT_VAL_001" "validateProposal valid" test_validateProposal_valid
+  , test "REQ_INT_VAL_002" "validateProposal unknown chain" test_validateProposal_unknownChain
+  , test "REQ_INT_VAL_003" "validateProposal inactive chain" test_validateProposal_inactiveChain
+  , test "REQ_INT_VAL_004" "validateProposal expired" test_validateProposal_expired
+  , test "REQ_INT_CNT_001" "countByStatus Pending" test_countByStatus_pending
+  , test "REQ_INT_CNT_002" "countByStatus UnderReview" test_countByStatus_underReview
+  , test "REQ_INT_CNT_003" "countByStatus Approved" test_countByStatus_approved
+  , test "REQ_INT_CNT_004" "countByStatus empty" test_countByStatus_empty
   ]
 
 -- =============================================================================

@@ -3,6 +3,11 @@ type = "local"
 path = "/Users/bob/code/idris2-cdk"
 ipkg = "idris2-cdk.ipkg"
 
+[custom.all.idris2-coverage]
+type = "local"
+path = "/Users/bob/code/idris2-coverage"
+ipkg = "idris2-coverage.ipkg"
+
 [custom.all.ouc]
 type = "local"
 path = "."

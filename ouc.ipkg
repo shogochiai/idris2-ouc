@@ -14,9 +14,8 @@ modules = Util.StringHex
         , OUC.Signatures
         , OUC.MultiSig
         , OUC.Relay
-        -- TODO: OUC.Lifecycle and OUC.Obligations need refactoring to use FRMonad API
-        -- , OUC.Lifecycle
-        -- , OUC.Obligations
+        , OUC.Lifecycle
+        , OUC.Obligations
         , AuditorPool.Core
         , Rewards.Core
         , Proposals.Core
@@ -29,6 +28,9 @@ modules = Util.StringHex
         , HttpOutcall.TxSender
         , ERC7546.Dictionary
         , ERC7546.Upgrade
+        -- Tests
+        , OUC.Tests.CoreTests
+        , Integration.Tests.AllTests
 
--- main = Main
--- executable = ouc
+main = Integration.Tests.AllTests
+executable = run-tests

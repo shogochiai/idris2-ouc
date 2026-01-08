@@ -1,12 +1,42 @@
 ||| OUC Core Module Tests
 module OUC.Tests.CoreTests
 
-import Idris2CoverageHelper.PerModule
 import FRMonad.Core
 import OUC.Core
 import Data.List
 
 %default covering
+
+-- =============================================================================
+-- Test Infrastructure (local definitions to avoid LazyCore dependency)
+-- =============================================================================
+
+||| Test definition record
+public export
+record TestDef where
+  constructor MkTestDef
+  testId   : String
+  testName : String
+  testFn   : IO Bool
+
+||| Create a test definition
+public export
+test : String -> String -> IO Bool -> TestDef
+test = MkTestDef
+
+runOne : TestDef -> IO Bool
+runOne t = do
+  result <- t.testFn
+  putStrLn $ (if result then "[PASS]" else "[FAIL]") ++ " " ++ t.testId ++ ": " ++ t.testName
+  pure result
+
+||| Run a test suite and report results
+export
+runTestSuite : String -> List TestDef -> IO ()
+runTestSuite suiteName tests = do
+  putStrLn $ "Running " ++ suiteName ++ " tests..."
+  results <- traverse runOne tests
+  putStrLn $ "\n" ++ show (length (filter id results)) ++ "/" ++ show (length results) ++ " tests passed"
 
 -- =============================================================================
 -- Test Helpers

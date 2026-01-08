@@ -1,15 +1,19 @@
 {
   "version": 1,
-  "dfx": "0.15.0",
+  "dfx": "0.30.1",
   "canisters": {
     "ouc": {
       "type": "custom",
       "candid": "can.did",
       "wasm": "build/ouc_stubbed.wasm",
-      "build": ["./scripts/build-canister.sh"],
       "declarations": {
         "node_compatibility": true
-      }
+      },
+      "metadata": [
+        {
+          "name": "candid:service"
+        }
+      ]
     }
   },
   "defaults": {

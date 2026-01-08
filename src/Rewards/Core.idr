@@ -124,7 +124,7 @@ calculateReward :
   Bool ->              -- Was review fast?
   TokenAmount
 calculateReward config fee highQuality fast =
-  let baseReward = divNatNZ (fee * config.auditorRewardShare) 100 SIsNonZero
+  let baseReward = divNatNZ (fee * config.auditorRewardShare) 100 ItIsSucc
   in let qualityBonus = if highQuality then config.qualityBonus else 0
      in let speedBonus = if fast then config.speedBonus else 0
         in baseReward + qualityBonus + speedBonus
@@ -132,7 +132,7 @@ calculateReward config fee highQuality fast =
 ||| Calculate treasury deposit from fee
 public export
 calculateTreasuryDeposit : RewardsConfig -> TokenAmount -> TokenAmount
-calculateTreasuryDeposit config fee = divNatNZ (fee * config.treasuryShare) 100 SIsNonZero
+calculateTreasuryDeposit config fee = divNatNZ (fee * config.treasuryShare) 100 ItIsSucc
 
 -- =============================================================================
 -- Reward Operations (FRC-compliant)

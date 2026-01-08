@@ -19,11 +19,13 @@ service : {
     getAuditorCount: () -> (nat) query;
 
     // Update Methods
+    // MVP: registerAuditor/suspendAuditor/reactivateAuditor ignore arguments
+    // Full Candid arg parsing will be added in Phase 3
     submitProposal: (text) -> (text);
     cancelProposal: (nat) -> (text);
-    registerAuditor: (nat) -> (text);
-    suspendAuditor: (principal) -> (text);
-    reactivateAuditor: (principal) -> (text);
+    registerAuditor: () -> (text);
+    suspendAuditor: () -> (text);
+    reactivateAuditor: () -> (text);
     assignAuditor: (nat, principal) -> (text);
     submitReview: (nat, text) -> (text);
     prepareExecution: (nat) -> (text);
