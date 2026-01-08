@@ -244,7 +244,8 @@ doReactivateAuditor = do
 
 ||| Dispatch command and write result
 ||| C sets arg[0] = command, calls main/dispatch, reads result
-||| NOTE: Uses case pattern matching because == is broken in RefC/WASM
+||| NOTE: == operator fixed in Idris2 PR #3708 for RefC/WASM32.
+||| Using case for pattern matching style consistency.
 dispatchCommand : IO ()
 dispatchCommand = do
   cmd <- getArg 0
