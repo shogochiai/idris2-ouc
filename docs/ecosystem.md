@@ -20,7 +20,7 @@ OUC Ecosystem
 │       ├── [~] lazy dfx ask           # Canister分析
 │       │   ├── [x] Candid interface検証 (--steps=4)
 │       │   ├── [x] WASM code coverage (--steps=4, ic-wasm)
-│       │   ├── [ ] Cycle消費分析
+│       │   ├── [x] Cycle消費分析 (--steps=4, top consumers表示)
 │       │   └── [ ] HTTP Outcall依存検出
 │       └── [ ] lazy dfx-lifecycle ask # Canister lifecycle助言
 │           ├── [ ] dfx deploy連携
