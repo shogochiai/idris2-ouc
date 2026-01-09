@@ -17,11 +17,11 @@ OUC Ecosystem
 │   │       └── [ ] Auditor割当て推奨
 │   │
 │   └── ICP側
-│       ├── [~] lazy dfx ask           # Canister分析
+│       ├── [x] lazy dfx ask           # Canister分析 (4/4 完了)
 │       │   ├── [x] Candid interface検証 (--steps=4)
 │       │   ├── [x] WASM code coverage (--steps=4, ic-wasm)
 │       │   ├── [x] Cycle消費分析 (--steps=4, top consumers表示)
-│       │   └── [ ] HTTP Outcall依存検出
+│       │   └── [x] HTTP Outcall依存検出 (--steps=4, ic0 call_* imports)
 │       └── [ ] lazy dfx-lifecycle ask # Canister lifecycle助言
 │           ├── [ ] dfx deploy連携
 │           ├── [ ] Canister upgrade検出
