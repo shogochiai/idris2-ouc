@@ -1,12 +1,31 @@
 [custom.all.idris2-cdk]
-type = "local"
-path = "/Users/bob/code/idris2-cdk"
+type = "github"
+url  = "https://github.com/shogochiai/idris2-cdk"
+commit = "225c8035a966e6f4d017f49b006ec15d1d51856a"
 ipkg = "idris2-cdk.ipkg"
 
 [custom.all.idris2-coverage]
 type = "local"
 path = "/Users/bob/code/idris2-coverage"
 ipkg = "idris2-coverage.ipkg"
+
+[custom.all.idris2-yul]
+type = "github"
+url  = "https://github.com/shogochiai/idris2-yul"
+commit = "0ec96ff"
+ipkg = "idris2-yul.ipkg"
+
+[custom.all.idris2-subcontract]
+type = "github"
+url  = "https://github.com/shogochiai/idris2-subcontract"
+commit = "794f5b5"
+ipkg = "idris2-subcontract.ipkg"
+
+[custom.all.idris2-ouf]
+type = "github"
+url  = "https://github.com/shogochiai/idris2-ouf"
+commit = "d4aaaaa"
+ipkg = "idris2-ouf.ipkg"
 
 [custom.all.ouc]
 type = "local"
