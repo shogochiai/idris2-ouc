@@ -12,7 +12,7 @@ OUC Ecosystem
 │   ├── EVM側
 │   │   ├── [ ] lazy evm ask           # EVM契約分析（stub）
 │   │   │   └── 依存: idris2-yul 分析機能
-│   │   └── [~] lazy evm-lifecycle ask # デプロイ/Upgrade助言 (進行中 2025/01/10)
+│   │   └── [x] lazy evm-lifecycle ask # デプロイ/Upgrade助言 (完了 2025/01/10)
 │   │       │   ※ mc (metacontract) パターン対応
 │   │       │   Dictionary: selector → impl マッピング
 │   │       │   Proxy: Dictionary委譲
@@ -26,7 +26,8 @@ OUC Ecosystem
 │   │       ├── [x] Pending upgrade検出 (2025/01/10)
 │   │       │       └── Upgrade.detectPendingUpgrades: snapshot間diff検出
 │   │       ├── [x] idris2-subcontract連携準備 (ERC7546 UCS型参照)
-│   │       └── [ ] Auditor割当て推奨
+│   │       └── [x] Auditor割当て推奨 (2025/01/10)
+│   │               └── Auditor.recommendFromCompare/recommendFromUpgrade: リスク評価→監査者推奨
 │   │
 │   └── ICP側
 │       ├── [x] lazy dfx ask           # Canister分析 (4/4 完了)
@@ -1078,15 +1079,16 @@ Test Coverage Gap = 「テスト書いたけど実行されてないコードが
 3. `lazy dfx ask` のstub解除
 
 ### P1: lifecycle統合
-1. [~] `lazy evm-lifecycle ask` 実装 (進行中 2025/01/10)
+1. [x] `lazy evm-lifecycle ask` 実装 (完了 2025/01/10)
    - ✅ LazyEvmLifecycle パッケージビルド成功
    - ✅ cast出力パース (storage slot, block number)
    - ✅ Dictionary getImplementation クエリ
    - ✅ queryAllImplementations バッチクエリ
    - ✅ queryDictionaryOwner クエリ
    - ✅ hasCode (zombie reference検出)
-   - [ ] Local vs Deployed impl比較
-   - [ ] E2Eテスト (Anvil + cast)
+   - ✅ Local vs Deployed impl比較 (Compare.compareLocalVsDeployed)
+   - ✅ Pending upgrade検出 (Upgrade.detectPendingUpgrades)
+   - ✅ Auditor割当て推奨 (Auditor.recommendFromCompare/recommendFromUpgrade)
 2. ✅ `lazy dfx-lifecycle ask` 実装 (2025/01/10完了)
    - Canister upgrade検出 (local vs deployed hash)
    - Stable memory migration hooks検出
