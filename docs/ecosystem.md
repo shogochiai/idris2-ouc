@@ -11,9 +11,19 @@ OUC Ecosystem
 │   │
 │   ├── EVM側
 │   │   ├── [ ] lazy evm ask           # EVM契約分析（stub）
-│   │   └── [ ] lazy evm-lifecycle ask # デプロイ/Upgrade助言
-│   │       ├── [ ] Upgrade proposal検出
-│   │       ├── [ ] mc CLI連携
+│   │   │   └── 依存: idris2-yul 分析機能
+│   │   └── [~] lazy evm-lifecycle ask # デプロイ/Upgrade助言 (進行中 2025/01/10)
+│   │       │   ※ mc (metacontract) パターン対応
+│   │       │   Dictionary: selector → impl マッピング
+│   │       │   Proxy: Dictionary委譲
+│   │       │   Upgrade: Dictionaryエントリ変更
+│   │       │   パッケージ: lazy/pkgs/LazyEvmLifecycle (ビルド成功)
+│   │       ├── [x] Dictionary状態クエリ (selector→impl via cast call)
+│   │       ├── [x] Storage slot読み取り (cast storage + hex parse)
+│   │       ├── [x] Block number取得 (cast block-number)
+│   │       ├── [ ] Local vs Deployed impl比較
+│   │       ├── [ ] Pending upgrade検出 (dictionary変更)
+│   │       ├── [x] idris2-subcontract連携準備 (ERC7546 UCS型参照)
 │   │       └── [ ] Auditor割当て推奨
 │   │
 │   └── ICP側
@@ -22,11 +32,14 @@ OUC Ecosystem
 │       │   ├── [x] WASM code coverage (--steps=4, ic-wasm)
 │       │   ├── [x] Cycle消費分析 (--steps=4, top consumers表示)
 │       │   └── [x] HTTP Outcall依存検出 (--steps=4, ic0 call_* imports)
-│       └── [ ] lazy dfx-lifecycle ask # Canister lifecycle助言
-│           ├── [ ] dfx deploy連携
-│           ├── [ ] Canister upgrade検出
-│           ├── [ ] Stable memory migration
-│           └── [ ] Controller権限管理
+│       └── [x] lazy dfx-lifecycle ask # Canister lifecycle助言 (完了)
+│           ├── [x] dfx deploy連携 (dfx canister status)
+│           ├── [x] Canister upgrade検出 (local vs deployed hash)
+│           ├── [x] Stable memory migration (pre/post upgrade hooks)
+│           └── [x] Controller権限管理 (single/no controller警告)
+│
+│   NOTE: mc (metacontract CLI) = Solidity参照実装 (別リポジトリ)
+│         本PJでは idris2-subcontract が同等の役割を担う
 │
 ├── idris2-* Package Suite
 │   │
@@ -36,16 +49,31 @@ OUC Ecosystem
 │   ├── idris2-yul (~/code/idris2-yul)
 │   │   ├── [x] EVM.Primitives     # EVM FFI
 │   │   ├── [x] EVM.Storage.*      # ERC-7201 slots
-│   │   └── [x] Compiler.EVM.*     # Yul codegen
+│   │   ├── [x] Compiler.EVM.*     # Yul codegen
+│   │   └── [x] examples/ERC7546Proxy.idr  # UCS Proxy (693B runtime, 2025/01/10)
+│   │           └── selector → Dictionary.getImplementation → DELEGATECALL
 │   │
 │   ├── idris2-subcontract (~/code/idris2-subcontract)
+│   │   │   ※ Solidity版 mc (metacontract) の Idris2 相当
 │   │   ├── [x] Subcontract.Standards.ERC7546.*  # UCS Proxy
 │   │   ├── [x] Subcontract.Core.*               # Framework
-│   │   └── cli/mc                               # MetaContract CLI
-│   │       ├── [x] mc init
-│   │       ├── [x] mc build
-│   │       ├── [~] mc deploy      # テンプレートのみ
-│   │       └── [~] mc upgrade     # テンプレートのみ
+│   │   ├── [x] Subcontract.Core.FR              # Failure-Recovery Monad (2025/01/10)
+│   │   ├── [x] Subcontract.Std.Functions.ProxyFactory  # CREATE2 ERC-7546 deployment (2025/01/10)
+│   │   │       ├── deployProxy(dictionary, salt) → proxy address
+│   │   │       ├── buildInitCode → 771 bytes (78 init + 693 runtime)
+│   │   │       └── computeProxyAddress → deterministic address
+│   │   ├── [ ] Contract状態分析API  # lazy evm-lifecycle ask 向け
+│   │   └── [ ] Upgrade検出API       # ERC7546 dictionary変更検出
+│   │
+│   ├── idris2-ouf (~/code/idris2-ouf)
+│   │   │   ※ Optimistic Upgrader Framework
+│   │   ├── [x] Main.Storages.Schema      # Storage slots
+│   │   ├── [x] Main.Functions.Factory    # createUpgrader via ProxyFactory (2025/01/10)
+│   │   │       └── CREATE2 deploys ERC-7546 proxy pointing to shared Dictionary
+│   │   ├── [x] Main.Functions.ProposeUpgrade
+│   │   ├── [x] Main.Functions.Vote
+│   │   ├── [x] Main.Functions.Tally
+│   │   └── [x] Main.Functions.AssignAuditor
 │   │
 │   ├── idris2-ouc (this repo)
 │   │   ├── src/Main.idr          # FFI dispatch (9 commands)
@@ -169,6 +197,99 @@ OUC Ecosystem
     ├── [ ] Claude Skills仕様書
     ├── [x] FABI.md (Failure-Aware Build Infrastructure)
     └── [x] OUC-Spec.md (Optimistic Upgrader Canister)
+```
+
+## ERC-7546 Proxy Deployment Architecture (2025/01/10)
+
+OUF (Optimistic Upgrader Framework) が ERC-7546 Proxy を CREATE2 でデプロイするアーキテクチャ。
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  OUF Factory.createUpgrader()                                               │
+│  ───────────────────────────────────────────────────────────────────────────│
+│                                                                             │
+│  1. upgraderId = getUpgraderCount()    ← salt for CREATE2                  │
+│  2. dictAddr = getDictionary()         ← shared Dictionary                  │
+│  3. proxyAddr = deployProxy(dictAddr, upgraderId)                          │
+│  4. registerUpgrader(upgraderId, proxyAddr)                                 │
+│  5. setUpgraderCount(upgraderId + 1)                                        │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  ProxyFactory.deployProxy(dictionary, salt)                                 │
+│  ───────────────────────────────────────────────────────────────────────────│
+│                                                                             │
+│  buildInitCode(dictionary):                                                 │
+│    [00-32]  PUSH32 <dictionary>       ┐                                     │
+│    [33-65]  PUSH32 DICTIONARY_SLOT    ├─ 66 bytes: store dict in slot      │
+│    [66]     SSTORE                    ┘                                     │
+│    [67-77]  PUSH2/DUP1/PUSH2/PUSH0/   ┐                                     │
+│             CODECOPY/PUSH0/RETURN     ├─ 12 bytes: return runtime          │
+│    [78+]    <runtime bytecode>        └─ 693 bytes: ERC7546Proxy           │
+│                                                                             │
+│  Total init code: 771 bytes                                                 │
+│                                                                             │
+│  CREATE2(value=0, offset=0, size=771, salt=upgraderId)                     │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  Deployed ERC-7546 Proxy (693 bytes runtime)                                │
+│  ───────────────────────────────────────────────────────────────────────────│
+│                                                                             │
+│  DICTIONARY_SLOT = 0x267691be3525af8a813d30db0c9e2bad...cff56f4            │
+│                ↓                                                            │
+│           sload(slot) → Dictionary address                                  │
+│                                                                             │
+│  Any external call:                                                         │
+│    1. getSelector() → first 4 bytes of calldata                            │
+│    2. STATICCALL dictionary.getImplementation(selector)                    │
+│    3. DELEGATECALL to returned implementation                              │
+│    4. Return/revert based on result                                         │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Package Flow
+
+```
+idris2-yul                 idris2-subcontract              idris2-ouf
+───────────────────        ───────────────────             ───────────────────
+examples/                  Std/Functions/                  Functions/
+  ERC7546Proxy.idr    →      ProxyFactory.idr         →     Factory.idr
+    │                          │                              │
+    │ compile                  │ embeds bytecode              │ imports
+    ▼                          ▼                              ▼
+  693B runtime         deployProxy(dict, salt)        createUpgrader()
+                       computeProxyAddress()
+```
+
+### Deterministic Address Calculation
+
+```
+proxyAddress = keccak256(0xff ++ factory ++ salt ++ keccak256(initCode))[12:]
+
+Where:
+  - factory = OUF Factory contract address
+  - salt = upgraderId (sequential counter)
+  - initCode = 771 bytes (depends on dictionary address)
+```
+
+### GitHub References (idris2-ouc/pack.toml)
+
+```toml
+[custom.all.idris2-yul]
+commit = "0ec96ff"  # ERC7546Proxy.idr added
+
+[custom.all.idris2-subcontract]
+commit = "794f5b5"  # ProxyFactory added
+url = "https://github.com/shogochiai/idris2-subcontract"
+
+[custom.all.idris2-ouf]
+commit = "d4aaaaa"  # Factory → ProxyFactory integration
 ```
 
 ## Design Principle: Upgrade = Build Rebinding + Execution Rebinding
@@ -955,11 +1076,24 @@ Test Coverage Gap = 「テスト書いたけど実行されてないコードが
 3. `lazy dfx ask` のstub解除
 
 ### P1: lifecycle統合
-1. `lazy evm-lifecycle ask` 実装
-2. `lazy dfx-lifecycle ask` 実装
-3. `mc deploy/upgrade` の実働化
-4. `dfx deploy` 連携
-5. Auditor自動割当て
+1. [~] `lazy evm-lifecycle ask` 実装 (進行中 2025/01/10)
+   - ✅ LazyEvmLifecycle パッケージビルド成功
+   - ✅ cast出力パース (storage slot, block number)
+   - ✅ Dictionary getImplementation クエリ
+   - ✅ queryAllImplementations バッチクエリ
+   - ✅ queryDictionaryOwner クエリ
+   - ✅ hasCode (zombie reference検出)
+   - [ ] Local vs Deployed impl比較
+   - [ ] E2Eテスト (Anvil + cast)
+2. ✅ `lazy dfx-lifecycle ask` 実装 (2025/01/10完了)
+   - Canister upgrade検出 (local vs deployed hash)
+   - Stable memory migration hooks検出
+   - Controller権限分析
+   - Cycles残高警告
+3. idris2-subcontract Upgrade検出API
+   - ERC7546 dictionary変更検出
+   - Contract状態分析
+4. Auditor自動割当て
 
 ### P2: Self-Amending基盤
 1. Futarchy予測市場コントラクト
