@@ -65,8 +65,10 @@ OUC Ecosystem
 │   │   │       ├── deployProxy(dictionary, salt) → proxy address
 │   │   │       ├── buildInitCode → 771 bytes (78 init + 693 runtime)
 │   │   │       └── computeProxyAddress → deterministic address
-│   │   ├── [ ] Contract状態分析API  # lazy evm-lifecycle ask 向け
-│   │   └── [ ] Upgrade検出API       # ERC7546 dictionary変更検出
+│   │   ├── [x] Contract状態分析API (2025/01/10)
+│   │   │       └── Analysis.idr: takeSnapshot, queryImplementation, addressHasCode
+│   │   └── [x] Upgrade検出API (2025/01/10)
+│   │           └── UpgradeDetection.idr: detectChanges, detectUpgrades, findZombieReferences
 │   │
 │   ├── idris2-ouf (~/code/idris2-ouf)
 │   │   │   ※ Optimistic Upgrader Framework
@@ -1094,9 +1096,9 @@ Test Coverage Gap = 「テスト書いたけど実行されてないコードが
    - Stable memory migration hooks検出
    - Controller権限分析
    - Cycles残高警告
-3. idris2-subcontract Upgrade検出API
-   - ERC7546 dictionary変更検出
-   - Contract状態分析
+3. [x] idris2-subcontract Upgrade検出API (2025/01/10)
+   - ✅ Analysis.idr: Contract状態分析 (takeSnapshot, queryImplementation)
+   - ✅ UpgradeDetection.idr: ERC7546 dictionary変更検出 (detectChanges, findZombieReferences)
 4. Auditor自動割当て
 
 ### P2: Self-Amending基盤
