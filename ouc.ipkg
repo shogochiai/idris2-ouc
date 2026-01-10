@@ -17,6 +17,7 @@ modules = Util.StringHex
         , OUC.Lifecycle
         , OUC.Obligations
         , AuditorPool.Core
+        , AuditorPool.AutoAssign
         , Rewards.Core
         , Proposals.Core
         -- EVM Communication Layer

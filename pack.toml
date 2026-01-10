@@ -10,21 +10,18 @@ path = "/Users/bob/code/idris2-coverage"
 ipkg = "idris2-coverage.ipkg"
 
 [custom.all.idris2-yul]
-type = "github"
-url  = "https://github.com/shogochiai/idris2-yul"
-commit = "0ec96ff"
+type = "local"
+path = "/Users/bob/code/idris2-yul"
 ipkg = "idris2-yul.ipkg"
 
 [custom.all.idris2-subcontract]
-type = "github"
-url  = "https://github.com/shogochiai/idris2-subcontract"
-commit = "794f5b5"
+type = "local"
+path = "/Users/bob/code/idris2-subcontract"
 ipkg = "idris2-subcontract.ipkg"
 
 [custom.all.idris2-ouf]
-type = "github"
-url  = "https://github.com/shogochiai/idris2-ouf"
-commit = "d4aaaaa"
+type = "local"
+path = "/Users/bob/code/idris2-ouf"
 ipkg = "idris2-ouf.ipkg"
 
 [custom.all.ouc]
