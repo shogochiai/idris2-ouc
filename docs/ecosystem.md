@@ -1099,7 +1099,10 @@ Test Coverage Gap = 「テスト書いたけど実行されてないコードが
 3. [x] idris2-subcontract Upgrade検出API (2025/01/10)
    - ✅ Analysis.idr: Contract状態分析 (takeSnapshot, queryImplementation)
    - ✅ UpgradeDetection.idr: ERC7546 dictionary変更検出 (detectChanges, findZombieReferences)
-4. Auditor自動割当て
+4. [x] Auditor自動割当て統合 (2025/01/10)
+   - ✅ AuditorPool/AutoAssign.idr: リスクベースの自動割当て
+   - RiskLevel/Priority型 (LazyEvmLifecycle.Auditor.Recommendと対応)
+   - autoAssignAuditors: 推奨パラメータに基づく監査者選出
 
 ### P2: Self-Amending基盤
 1. Futarchy予測市場コントラクト
