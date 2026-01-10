@@ -10,8 +10,8 @@ OUC Ecosystem
 │   ├── [x] lazy core ask          # Idris2 STI Parity分析
 │   │
 │   ├── EVM側
-│   │   ├── [ ] lazy evm ask           # EVM契約分析（stub）
-│   │   │   └── 依存: idris2-yul 分析機能
+│   │   ├── [x] lazy evm ask           # EVM契約分析 (完了 2025/01/10 確認)
+│   │   │   └── Steps 1-3: LazyCore, Step 4: solc source maps + bytecode tracing
 │   │   └── [x] lazy evm-lifecycle ask # デプロイ/Upgrade助言 (完了 2025/01/10)
 │   │       │   ※ mc (metacontract) パターン対応
 │   │       │   Dictionary: selector → impl マッピング
@@ -1075,8 +1075,8 @@ Test Coverage Gap = 「テスト書いたけど実行されてないコードが
    - `==`, `<`, `>`, `<=`, `>=` 演算子が WASM32 で正常動作
    - Bug #2, #3 は引き続き回避策使用中
 1. ✅ 削除されたSPEC.tomlの復活 (2025/01/07完了)
-2. `lazy evm ask` のstub解除
-3. `lazy dfx ask` のstub解除
+2. ✅ `lazy evm ask` 実装確認 (2025/01/10) - 6-step STI Parity + EVM coverage
+3. ✅ `lazy dfx ask` 実装確認 (2025/01/10) - 6-step STI Parity + ICP canister coverage
 
 ### P1: lifecycle統合
 1. [x] `lazy evm-lifecycle ask` 実装 (完了 2025/01/10)
