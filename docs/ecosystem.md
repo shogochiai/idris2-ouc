@@ -21,8 +21,10 @@ OUC Ecosystem
 │   │       ├── [x] Dictionary状態クエリ (selector→impl via cast call)
 │   │       ├── [x] Storage slot読み取り (cast storage + hex parse)
 │   │       ├── [x] Block number取得 (cast block-number)
-│   │       ├── [ ] Local vs Deployed impl比較
-│   │       ├── [ ] Pending upgrade検出 (dictionary変更)
+│   │       ├── [x] Local vs Deployed impl比較 (2025/01/10)
+│   │       │       └── Compare.compareLocalVsDeployed: handlers ↔ dictionary比較
+│   │       ├── [x] Pending upgrade検出 (2025/01/10)
+│   │       │       └── Upgrade.detectPendingUpgrades: snapshot間diff検出
 │   │       ├── [x] idris2-subcontract連携準備 (ERC7546 UCS型参照)
 │   │       └── [ ] Auditor割当て推奨
 │   │
