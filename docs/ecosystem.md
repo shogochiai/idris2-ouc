@@ -168,14 +168,14 @@ OUC Ecosystem
 │   │   └── [ ] Observable outcome記録
 │   │
 │   ├── AI Agent Infrastructure
-│   │   ├── [ ] Claude Skills定義
-│   │   │   ├── [ ] オンチェーンデータ取得
-│   │   │   ├── [ ] 予測市場価格読取り
-│   │   │   └── [ ] Upgrade提案生成
-│   │   ├── [ ] 定期監視ループ
-│   │   │   ├── [ ] Annotation変化検出
-│   │   │   └── [ ] Gap→Action変換
-│   │   └── [ ] lazy evm-lifecycle統合
+│   │   ├── [x] Claude Skills定義 (2025/01/10)
+│   │   │   ├── [x] オンチェーンデータ取得 (ouc-onchain skill)
+│   │   │   ├── [ ] 予測市場価格読取り (Futarchy依存)
+│   │   │   └── [x] Upgrade提案生成 (/propose-upgrade command)
+│   │   ├── [x] 定期監視ループ設計 (ouc-monitor skill)
+│   │   │   ├── [x] Annotation変化検出パターン
+│   │   │   └── [x] Gap→Action変換ルール
+│   │   └── [x] lazy evm-lifecycle統合 (/check-upgrade command)
 │   │
 │   └── Governance-by-Observation
 │       ├── [ ] 使用シグナル収集
@@ -1105,9 +1105,13 @@ Test Coverage Gap = 「テスト書いたけど実行されてないコードが
    - autoAssignAuditors: 推奨パラメータに基づく監査者選出
 
 ### P2: Self-Amending基盤
-1. Futarchy予測市場コントラクト
-2. Claude Skillsオンチェーンアクセス
-3. AI Agent監視ループ
+1. [ ] Futarchy予測市場コントラクト (大規模実装)
+2. [x] Claude Skillsオンチェーンアクセス (2025/01/10)
+   - ouc-onchain: EVM/ICP データ取得パターン
+   - /check-upgrade: Upgrade状態確認
+   - /propose-upgrade: 提案生成・送信
+3. [x] AI Agent監視ループ設計 (2025/01/10)
+   - ouc-monitor: 監視ループインフラ設計
 
 ### P3: 本番運用
 1. マルチチェーン対応
