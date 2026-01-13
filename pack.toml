@@ -1,30 +1,48 @@
+# OUC Pack Configuration (Portable)
+# All dependencies are GitHub-based for portability
+
 [custom.all.idris2-cdk]
 type = "github"
 url  = "https://github.com/shogochiai/idris2-cdk"
-commit = "225c8035a966e6f4d017f49b006ec15d1d51856a"
+commit = "81d7368fde6749f0be1642dfdc9389a5fc3e6b6e"
 ipkg = "idris2-cdk.ipkg"
 
+[custom.all.idris2-coverage-core]
+type = "github"
+url  = "https://github.com/shogochiai/idris2-coverage-core"
+commit = "79e4c8a7e7569803119af69797f52eeb5da13f89"
+ipkg = "idris2-coverage-core.ipkg"
+
 [custom.all.idris2-coverage]
-type = "local"
-path = "/Users/bob/code/idris2-coverage"
+type = "github"
+url  = "https://github.com/shogochiai/idris2-coverage"
+commit = "0027e4ff1d614beffe04ecad8de3417e55949ed6"
 ipkg = "idris2-coverage.ipkg"
 
 [custom.all.idris2-yul]
-type = "local"
-path = "/Users/bob/code/idris2-yul"
+type = "github"
+url  = "https://github.com/shogochiai/idris2-yul"
+commit = "0ec96ff0b402097a81e49d23ee48c9b10ac450ab"
 ipkg = "idris2-yul.ipkg"
 
 [custom.all.idris2-subcontract]
-type = "local"
-path = "/Users/bob/code/idris2-subcontract"
+type = "github"
+url  = "https://github.com/shogochiai/idris2-mc"
+commit = "72bfc002803e018171a84ab6c3029d09a0b2f534"
 ipkg = "idris2-subcontract.ipkg"
 
 [custom.all.idris2-ouf]
-type = "local"
-path = "/Users/bob/code/idris2-ouf"
+type = "github"
+url  = "https://github.com/shogochiai/idris2-ouf"
+commit = "6b9f181cb1f32db6d6b6557983d9ac1e48be2451"
 ipkg = "idris2-ouf.ipkg"
 
 [custom.all.ouc]
 type = "local"
 path = "."
 ipkg = "ouc.ipkg"
+
+[custom.all.ouc-minimal]
+type = "local"
+path = "."
+ipkg = "ouc-minimal.ipkg"

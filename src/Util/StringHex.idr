@@ -6,6 +6,7 @@ module Util.StringHex
 
 import Data.String
 import Data.List
+import Data.Bits
 
 %default total
 
@@ -74,3 +75,47 @@ isValidSelector s = isHexPrefixed s && length s == 10
 public export
 isValidTxHash : String -> Bool
 isValidTxHash s = isHexPrefixed s && length s == 66
+
+-- =============================================================================
+-- Hex <-> Bytes Conversion
+-- =============================================================================
+
+||| Convert hex char to nibble (0-15)
+hexCharToNibble : Char -> Bits8
+hexCharToNibble c =
+  if c >= '0' && c <= '9' then cast (ord c - ord '0')
+  else if c >= 'a' && c <= 'f' then cast (ord c - ord 'a' + 10)
+  else if c >= 'A' && c <= 'F' then cast (ord c - ord 'A' + 10)
+  else 0
+
+||| Convert nibble to hex char
+nibbleToHexChar : Bits8 -> Char
+nibbleToHexChar n =
+  if n < 10 then chr (cast n + ord '0')
+  else chr (cast (n - 10) + ord 'a')
+
+||| Convert pairs of hex chars to bytes
+hexPairsToBytes : List Char -> List Bits8
+hexPairsToBytes [] = []
+hexPairsToBytes [_] = []  -- odd length, ignore trailing
+hexPairsToBytes (h :: l :: rest) =
+  let hi = hexCharToNibble h
+      lo = hexCharToNibble l
+  in (hi * 16 + lo) :: hexPairsToBytes rest
+
+||| Convert hex string to bytes (strips 0x prefix if present)
+public export
+hexToBytes : String -> List Bits8
+hexToBytes s = hexPairsToBytes (unpack (stripHexPrefix s))
+
+||| Convert byte to two hex chars
+byteToHexChars : Bits8 -> List Char
+byteToHexChars b =
+  [ nibbleToHexChar (b `div` 16)
+  , nibbleToHexChar (b `mod` 16)
+  ]
+
+||| Convert bytes to hex string (without 0x prefix)
+public export
+bytesToHex : List Bits8 -> String
+bytesToHex bs = pack (concatMap byteToHexChars bs)
