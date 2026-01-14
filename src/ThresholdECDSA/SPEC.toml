@@ -3,12 +3,6 @@
 
 [definitions]
 module_self = "ThresholdECDSA"
-fn_signWithEcdsa = "FFI.signWithEcdsa"
-fn_setMessageHash = "FFI.setMessageHash"
-fn_setKey = "FFI.setKey"
-fn_setDerivationPath = "FFI.setDerivationPath"
-fn_getSignStatus = "FFI.getSignStatus"
-fn_getSignature = "FFI.getSignature"
 
 # =============================================================================
 # Key Management
@@ -65,126 +59,17 @@ tags = ["derivation", "format"]
 # =============================================================================
 
 [[spec]]
-id = "REQ_ECDSA_SIGN_001"
-description = "Sign 32-byte message hash with t-ECDSA"
-priority = "high"
-tags = ["sign", "core"]
-
-[[spec]]
-id = "REQ_ECDSA_SIGN_002"
-description = "Async call to Management Canister sign_with_ecdsa"
-priority = "high"
-tags = ["sign", "async"]
-
-[[spec]]
 id = "REQ_ECDSA_SIGN_003"
 description = "Attach correct cycle cost (25B production, 10B test)"
 priority = "high"
 tags = ["sign", "cycles"]
-
-[[spec]]
-id = "REQ_ECDSA_SIGN_004"
-description = "Return DER-encoded signature"
-priority = "high"
-tags = ["sign", "format"]
-
-[[spec]]
-id = "REQ_ECDSA_SIGN_005"
-description = "Track signing status (pending/success/error)"
-priority = "medium"
-tags = ["sign", "status"]
-
-# =============================================================================
-# Public Key Operations
-# =============================================================================
-
-[[spec]]
-id = "REQ_ECDSA_PUBKEY_001"
-description = "Retrieve public key for derivation path"
-priority = "high"
-tags = ["pubkey", "core"]
-
-[[spec]]
-id = "REQ_ECDSA_PUBKEY_002"
-description = "Return SEC1-encoded public key"
-priority = "medium"
-tags = ["pubkey", "format"]
-
-[[spec]]
-id = "REQ_ECDSA_PUBKEY_003"
-description = "Include chain code for BIP-32 derivation"
-priority = "low"
-tags = ["pubkey", "chaincode"]
 
 # =============================================================================
 # FFI Bridge
 # =============================================================================
 
 [[spec]]
-id = "REQ_ECDSA_FFI_001"
-description = "C FFI for setting message hash"
-priority = "high"
-tags = ["ffi", "hash"]
-
-[[spec]]
 id = "REQ_ECDSA_FFI_002"
 description = "C FFI for setting key type"
 priority = "high"
 tags = ["ffi", "key"]
-
-[[spec]]
-id = "REQ_ECDSA_FFI_003"
-description = "C FFI for setting derivation path"
-priority = "high"
-tags = ["ffi", "path"]
-
-[[spec]]
-id = "REQ_ECDSA_FFI_004"
-description = "C FFI for initiating sign operation"
-priority = "high"
-tags = ["ffi", "sign"]
-
-[[spec]]
-id = "REQ_ECDSA_FFI_005"
-description = "C FFI for reading signature result"
-priority = "high"
-tags = ["ffi", "result"]
-
-# =============================================================================
-# Type Definitions
-# =============================================================================
-
-[[type]]
-id = "REQ_TYPE_ECDSA_001"
-text = "EcdsaCurve: secp256k1"
-module = "${module_self}.Core"
-
-[[type]]
-id = "REQ_TYPE_ECDSA_002"
-text = "KeyId: curve + name"
-module = "${module_self}.Core"
-
-[[type]]
-id = "REQ_TYPE_ECDSA_003"
-text = "DerivationPath: list of 4-byte segments"
-module = "${module_self}.Core"
-
-[[type]]
-id = "REQ_TYPE_ECDSA_004"
-text = "EcdsaSignature: r + s (32 bytes each)"
-module = "${module_self}.Core"
-
-[[type]]
-id = "REQ_TYPE_ECDSA_005"
-text = "SignStatus: Pending | Success | Error"
-module = "${module_self}.Core"
-
-[[type]]
-id = "REQ_TYPE_ECDSA_006"
-text = "PublicKey: SEC1-encoded bytes"
-module = "${module_self}.Core"
-
-[[type]]
-id = "REQ_TYPE_ECDSA_007"
-text = "EvmAddress: 20-byte address"
-module = "${module_self}.Core"

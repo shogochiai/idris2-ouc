@@ -150,8 +150,8 @@ allTests =
 
   -- Signing
   , test "REQ_ECDSA_SIGN_003" "Production cycle cost" test_sign_003
-  , test "REQ_ECDSA_SIGN_003b" "Test cycle cost" test_sign_003b
-  , test "REQ_ECDSA_SIGN_003c" "Local cycle cost" test_sign_003c
+  , test "REQ_ECDSA_SIGN_003" "Test cycle cost" test_sign_003b
+  , test "REQ_ECDSA_SIGN_003" "Local cycle cost" test_sign_003c
 
   -- Types
   , test "REQ_TYPE_ECDSA_001" "EcdsaCurve Show" test_type_001
@@ -161,17 +161,20 @@ allTests =
   , test "REQ_TYPE_ECDSA_007" "EvmAddress bytes" test_type_007
 
   -- Key type conversion
-  , test "REQ_ECDSA_FFI_002a" "keyTypeToInt Production" test_keytype_prod
-  , test "REQ_ECDSA_FFI_002b" "keyTypeToInt Test" test_keytype_test
-  , test "REQ_ECDSA_FFI_002c" "keyTypeToInt Local" test_keytype_local
-  , test "REQ_ECDSA_FFI_002d" "keyIdToType round-trip" test_keyid_to_type
+  , test "REQ_ECDSA_FFI_002" "keyTypeToInt Production" test_keytype_prod
+  , test "REQ_ECDSA_FFI_002" "keyTypeToInt Test" test_keytype_test
+  , test "REQ_ECDSA_FFI_002" "keyTypeToInt Local" test_keytype_local
+  , test "REQ_ECDSA_FFI_002" "keyIdToType round-trip" test_keyid_to_type
   ]
 
-||| Run all tests and return (passed, failed)
+||| Run all tests and print results
 export
-runAllTests : (Nat, Nat)
-runAllTests =
-  let results = map (\t => t.run ()) allTests
-      passed = length $ filter id results
-      failed = length $ filter not results
-  in (passed, failed)
+runAllTests : IO ()
+runAllTests = do
+  let results = map (\t => (t.specId, t.description, t.run ())) allTests
+      passed = length $ filter (\(_, _, r) => r) results
+      failed = length $ filter (\(_, _, r) => not r) results
+  putStrLn "=== ThresholdECDSA Tests ==="
+  for_ results $ \(sid, desc, r) =>
+    putStrLn $ (if r then "[PASS] " else "[FAIL] ") ++ sid ++ ": " ++ desc
+  putStrLn $ "=== Results: " ++ show passed ++ "/" ++ show (passed + failed) ++ " passed ==="

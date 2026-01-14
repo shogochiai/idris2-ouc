@@ -1,0 +1,126 @@
+# ERC-7546 Upgradeable Clone Specification
+# Single implementation address pattern (NOT Diamond/EIP-2535)
+# Each clone has one upgradeable implementation via upgradeTo()
+
+[definitions]
+prefix = "REQ_ERC7546"
+
+[[spec_area]]
+name = "Address Validation"
+
+[[spec]]
+id = "${prefix}_ADDR_001"
+title = "Valid Ethereum address format"
+invariant = "isValidEthAddress true iff 0x prefix and length == 42"
+
+[[spec]]
+id = "${prefix}_ADDR_002"
+title = "Invalid address detection"
+invariant = "isValidEthAddress false for short, no-prefix, or malformed addresses"
+
+[[spec]]
+id = "${prefix}_ADDR_003"
+title = "validateImplementation success case"
+invariant = "validateImplementation returns Ok () for valid 42-char address"
+
+[[spec]]
+id = "${prefix}_ADDR_004"
+title = "validateImplementation failure case"
+invariant = "validateImplementation returns Fail DecodeError for invalid address"
+
+[[spec_area]]
+name = "Calldata Construction"
+
+[[spec]]
+id = "${prefix}_CALL_001"
+title = "upgradeTo calldata format"
+invariant = "buildUpgradeTo returns 0x3659cfe6 + padded address"
+
+[[spec]]
+id = "${prefix}_CALL_002"
+title = "upgradeTo rejects invalid address"
+invariant = "buildUpgradeTo fails with DecodeError for non-0x or wrong length addresses"
+
+[[spec]]
+id = "${prefix}_CALL_003"
+title = "upgradeToAndCall calldata format"
+invariant = "buildUpgradeToAndCall returns 0x4f1ef286 + encoded address + data"
+
+[[spec]]
+id = "${prefix}_CALL_004"
+title = "upgradeToAndCall rejects invalid address"
+invariant = "buildUpgradeToAndCall fails with DecodeError for invalid address"
+
+[[spec]]
+id = "${prefix}_CALL_005"
+title = "upgradeToAndCall rejects invalid init data"
+invariant = "buildUpgradeToAndCall fails with DecodeError for non-hex init data"
+
+[[spec]]
+id = "${prefix}_CALL_006"
+title = "implementation() selector"
+invariant = "buildGetImplementation returns 0x5c60da1b"
+
+[[spec_area]]
+name = "Clone Upgrade Request"
+
+[[spec]]
+id = "${prefix}_REQ_001"
+title = "Upgrade to same impl fails"
+invariant = "validateCloneUpgradeRequest fails with InvalidState if currentImpl == newImpl"
+
+[[spec]]
+id = "${prefix}_REQ_002"
+title = "Invalid clone address fails"
+invariant = "validateCloneUpgradeRequest fails with DecodeError for invalid cloneAddress"
+
+[[spec]]
+id = "${prefix}_REQ_003"
+title = "Valid request succeeds"
+invariant = "validateCloneUpgradeRequest Ok () when all addresses valid and different impls"
+
+[[spec]]
+id = "${prefix}_REQ_004"
+title = "Calldata without init uses upgradeTo"
+invariant = "buildCloneUpgradeCalldata uses 0x3659cfe6 selector when initCalldata is Nothing"
+
+[[spec]]
+id = "${prefix}_REQ_005"
+title = "Calldata with init uses upgradeToAndCall"
+invariant = "buildCloneUpgradeCalldata uses 0x4f1ef286 selector when initCalldata is Just"
+
+[[spec_area]]
+name = "Type Construction"
+
+[[spec]]
+id = "${prefix}_TYPE_001"
+title = "CloneId equality"
+invariant = "CloneId equality based on address field"
+
+[[spec]]
+id = "${prefix}_TYPE_002"
+title = "ImplementationInfo show"
+invariant = "show ImplementationInfo includes address and version"
+
+[[spec]]
+id = "${prefix}_TYPE_003"
+title = "CloneUpgradeRequest show"
+invariant = "show CloneUpgradeRequest includes CloneUpgrade identifier"
+
+[[spec_area]]
+name = "Standard Selectors"
+
+[[spec]]
+id = "${prefix}_SEL_001"
+title = "UPGRADE_TO_SELECTOR value"
+invariant = "UPGRADE_TO_SELECTOR == 0x3659cfe6"
+
+[[spec]]
+id = "${prefix}_SEL_002"
+title = "UPGRADE_TO_AND_CALL_SELECTOR value"
+invariant = "UPGRADE_TO_AND_CALL_SELECTOR == 0x4f1ef286"
+
+[[spec]]
+id = "${prefix}_SEL_003"
+title = "IMPLEMENTATION_SELECTOR value"
+invariant = "IMPLEMENTATION_SELECTOR == 0x5c60da1b"

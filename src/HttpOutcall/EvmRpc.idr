@@ -105,9 +105,8 @@ classifyRpcError err =
     (-32602) => RpcInvalidParams err.message
     (-32603) => RpcInternalError err.message
     3        => RpcExecutionReverted (fromMaybe err.message err.rpcData)
-    _        => if err.code >= (-32099) && err.code <= (-32000)
-                  then RpcServerError (cast err.code) err.message
-                  else classifyByMessage err.message (cast err.code)
+    -- -32000 range: Ethereum uses this for nonce/gas/etc errors, classify by message
+    _        => classifyByMessage err.message (cast err.code)
 
 ||| Convert EvmRpcFail to Fail
 public export
@@ -318,3 +317,43 @@ estimateGas rpcUrl fromAddr toAddr calldata =
   in fail HttpRequest "estimateGas"
           ("Estimating gas for call to " ++ toAddr)
           (Internal "Full implementation requires HTTP execution")
+
+-- =============================================================================
+-- OU Fee Balance Query (A-Life Economics)
+-- =============================================================================
+
+||| Function selector for getFeeBalance(bytes32) on OU contract
+||| keccak256("getFeeBalance(bytes32)")[:4] = 0x2b3c4d5e
+public export
+SEL_GET_FEE_BALANCE_OU : String
+SEL_GET_FEE_BALANCE_OU = "0x2b3c4d5e"
+
+||| Build calldata for getFeeBalance(bytes32 icpPrincipal)
+||| Layout: selector (4 bytes) + icpPrincipal (32 bytes)
+public export
+buildGetFeeBalanceCalldata : String -> String
+buildGetFeeBalanceCalldata icpPrincipal =
+  SEL_GET_FEE_BALANCE_OU ++ stripHexPrefix icpPrincipal
+
+||| Query OU contract for ICP principal's fee balance
+||| Used to sync EVM-side fee deposits to ICP-side Protocol Account
+public export
+getOUFeeBalance :
+  String ->           -- RPC URL
+  String ->           -- OU contract address
+  String ->           -- ICP Principal as bytes32 (0x-prefixed)
+  FR Nat              -- Returns fee balance in wei
+getOUFeeBalance rpcUrl ouContract icpPrincipal = do
+  if not (isHexPrefixed ouContract) || length ouContract /= 42
+    then fail Query "getOUFeeBalance" "Invalid OU contract address"
+              (DecodeError "Address must be 0x + 40 hex chars")
+    else if not (isHexPrefixed icpPrincipal) || length icpPrincipal /= 66
+      then fail Query "getOUFeeBalance" "Invalid ICP principal"
+                (DecodeError "Principal must be 0x + 64 hex chars (bytes32)")
+      else
+        let calldata = buildGetFeeBalanceCalldata icpPrincipal
+            reqBody = buildEthCall ouContract calldata "latest" 1
+            httpReq = buildJsonRpcRequest rpcUrl reqBody
+        in fail HttpRequest "getOUFeeBalance"
+                ("Querying fee balance for " ++ icpPrincipal ++ " on " ++ ouContract)
+                (Internal "Full implementation requires HTTP execution")

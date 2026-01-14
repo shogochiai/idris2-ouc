@@ -1,7 +1,8 @@
-||| ERC-7546 Dictionary Module
+||| ERC-7546 Upgradeable Clone Module
 |||
-||| Constructs calldata for ERC-7546 Diamond/Dictionary pattern upgrades.
-||| ERC-7546 uses a function selector -> implementation address mapping.
+||| Constructs calldata for ERC-7546 Upgradeable Clone upgrades.
+||| ERC-7546 clones can be upgraded to new implementations via upgradeTo().
+||| NOT Diamond pattern - each clone has a single implementation address.
 module ERC7546.Dictionary
 
 import FRMonad.Core
@@ -12,119 +13,75 @@ import Util.StringHex as SHex
 %default total
 
 -- =============================================================================
--- ERC-7546 Types
+-- ERC-7546 Upgradeable Clone Types
 -- =============================================================================
 
-||| Function selector (4 bytes as hex string)
+||| Clone instance identifier
 public export
-record FunctionSelector where
-  constructor MkSelector
-  hex : String                    -- 0x-prefixed 4-byte hex (e.g., "0x12345678")
+record CloneId where
+  constructor MkCloneId
+  address : String  -- Clone contract address (0x + 40 hex)
 
 public export
-Show FunctionSelector where
-  show s = s.hex
+Show CloneId where
+  show c = c.address
 
 public export
-Eq FunctionSelector where
-  s1 == s2 = s1.hex == s2.hex
+Eq CloneId where
+  c1 == c2 = c1.address == c2.address
 
-||| Validate selector format
+||| Implementation version info
 public export
-isValidSelector : FunctionSelector -> Bool
-isValidSelector sel =
-  SHex.isHexPrefixed sel.hex && length sel.hex == 10
-
-||| Dictionary entry: selector -> implementation
-public export
-record DictionaryEntry where
-  constructor MkDictionaryEntry
-  selector : FunctionSelector
-  impl     : String               -- Implementation contract address
+record ImplementationInfo where
+  constructor MkImplementationInfo
+  address : String        -- Implementation contract address
+  version : Nat           -- Version number
+  codeHash : String       -- Hash of implementation bytecode
 
 public export
-Show DictionaryEntry where
-  show e = show e.selector ++ " -> " ++ e.impl
-
-public export
-Eq DictionaryEntry where
-  e1 == e2 = e1.selector == e2.selector && e1.impl == e2.impl
-
-||| Dictionary update operation type
-public export
-data DictOperation
-  = AddEntry DictionaryEntry      -- Add new selector mapping
-  | RemoveEntry FunctionSelector  -- Remove selector mapping
-  | ReplaceEntry DictionaryEntry  -- Replace existing mapping
-
-public export
-Show DictOperation where
-  show (AddEntry e)     = "Add(" ++ show e ++ ")"
-  show (RemoveEntry s)  = "Remove(" ++ show s ++ ")"
-  show (ReplaceEntry e) = "Replace(" ++ show e ++ ")"
-
-||| Facet cut action (EIP-2535 compatible)
-public export
-data FacetCutAction = Add | Replace | Remove
-
-public export
-Show FacetCutAction where
-  show Add     = "Add"
-  show Replace = "Replace"
-  show Remove  = "Remove"
-
-||| Check if action is Remove
-public export
-isRemove : FacetCutAction -> Bool
-isRemove Remove = True
-isRemove _      = False
-
-||| Facet cut structure
-public export
-record FacetCut where
-  constructor MkFacetCut
-  facetAddress : String
-  action       : FacetCutAction
-  selectors    : List FunctionSelector
-
-public export
-Show FacetCut where
-  show f = "FacetCut{" ++ f.facetAddress ++ ", " ++ show f.action ++
-           ", " ++ show (length f.selectors) ++ " selectors}"
+Show ImplementationInfo where
+  show i = "Impl{" ++ i.address ++ ", v" ++ show i.version ++ "}"
 
 -- =============================================================================
 -- ERC-7546 Standard Selectors
 -- =============================================================================
 
 ||| upgradeTo(address newImplementation)
+||| keccak256("upgradeTo(address)")[:4]
 public export
 UPGRADE_TO_SELECTOR : String
 UPGRADE_TO_SELECTOR = "0x3659cfe6"
 
 ||| upgradeToAndCall(address newImplementation, bytes data)
+||| keccak256("upgradeToAndCall(address,bytes)")[:4]
 public export
 UPGRADE_TO_AND_CALL_SELECTOR : String
 UPGRADE_TO_AND_CALL_SELECTOR = "0x4f1ef286"
 
-||| diamondCut(FacetCut[] calldata _diamondCut, address _init, bytes calldata _calldata)
+||| implementation() - returns current implementation address
+||| keccak256("implementation()")[:4]
 public export
-DIAMOND_CUT_SELECTOR : String
-DIAMOND_CUT_SELECTOR = "0x1f931c1c"
+IMPLEMENTATION_SELECTOR : String
+IMPLEMENTATION_SELECTOR = "0x5c60da1b"
 
-||| facets() - returns all facets and their selectors
-public export
-FACETS_SELECTOR : String
-FACETS_SELECTOR = "0x7a0ed627"
+-- =============================================================================
+-- Address Validation
+-- =============================================================================
 
-||| facetAddress(bytes4 selector) - returns facet address for selector
+||| Validate Ethereum address format (0x + 40 hex chars)
 public export
-FACET_ADDRESS_SELECTOR : String
-FACET_ADDRESS_SELECTOR = "0xcdffacc6"
+isValidEthAddress : String -> Bool
+isValidEthAddress addr =
+  SHex.isHexPrefixed addr && strLength addr == 42
 
-||| facetFunctionSelectors(address facet) - returns selectors for facet
+||| Validate implementation address
 public export
-FACET_SELECTORS_SELECTOR : String
-FACET_SELECTORS_SELECTOR = "0xadfca15e"
+validateImplementation : String -> FR ()
+validateImplementation addr =
+  if isValidEthAddress addr
+    then ok Query "validateImplementation" ("Valid: " ++ addr) ()
+    else fail Query "validateImplementation" "Invalid address format"
+              (DecodeError "Implementation address must be 0x + 40 hex chars")
 
 -- =============================================================================
 -- ABI Encoding Helpers
@@ -134,28 +91,16 @@ FACET_SELECTORS_SELECTOR = "0xadfca15e"
 encodeAddress : String -> String
 encodeAddress addr = SHex.padTo32 addr
 
-||| Encode uint8 (action enum, 0-2 for FacetCutAction)
-encodeUint8 : Nat -> String
-encodeUint8 0 = SHex.padTo32 "00"
-encodeUint8 1 = SHex.padTo32 "01"
-encodeUint8 2 = SHex.padTo32 "02"
-encodeUint8 _ = SHex.padTo32 "00"  -- Fallback
-
-||| Encode bytes4 selector
-encodeSelector : FunctionSelector -> String
-encodeSelector sel =
-  let stripped = SHex.stripHexPrefix sel.hex
-  in stripped ++ SHex.takeZeros 56  -- Pad to 32 bytes, right-aligned
-
 -- =============================================================================
 -- Calldata Construction
 -- =============================================================================
 
 ||| Build upgradeTo calldata
+||| Used to upgrade a clone to a new implementation
 public export
 buildUpgradeTo : String -> FR String
 buildUpgradeTo newImpl =
-  if not (SHex.isHexPrefixed newImpl) || length newImpl /= 42
+  if not (isValidEthAddress newImpl)
     then fail Update "buildUpgradeTo" "Invalid address"
               (DecodeError "Implementation address must be 0x + 40 hex chars")
     else
@@ -165,132 +110,71 @@ buildUpgradeTo newImpl =
             calldata
 
 ||| Build upgradeToAndCall calldata
+||| Upgrades and calls initialization function atomically
 public export
 buildUpgradeToAndCall :
-  String ->           -- new implementation
-  String ->           -- initialization calldata
+  String ->           -- new implementation address
+  String ->           -- initialization calldata (hex)
   FR String
 buildUpgradeToAndCall newImpl initData =
-  if not (SHex.isHexPrefixed newImpl) || length newImpl /= 42
+  if not (isValidEthAddress newImpl)
     then fail Update "buildUpgradeToAndCall" "Invalid address"
               (DecodeError "Implementation address format invalid")
-    else
-      -- Simplified: proper impl would encode dynamic bytes
-      let calldata = UPGRADE_TO_AND_CALL_SELECTOR ++ encodeAddress newImpl
-      in ok Update "buildUpgradeToAndCall"
-            ("Built upgradeToAndCall(" ++ newImpl ++ ", ...)")
-            calldata
-
-||| Build diamond cut for single facet
-public export
-buildSingleFacetCut :
-  FacetCut ->
-  FR String
-buildSingleFacetCut cut =
-  if isNil cut.selectors && not (isRemove cut.action)
-    then fail Update "buildSingleFacetCut" "No selectors"
-              (InvalidState "Add/Replace requires at least one selector")
-    else if not (SHex.isHexPrefixed cut.facetAddress) || length cut.facetAddress /= 42
-      then fail Update "buildSingleFacetCut" "Invalid facet address"
-                (DecodeError "Facet address format invalid")
+    else if not (SHex.isHexPrefixed initData)
+      then fail Update "buildUpgradeToAndCall" "Invalid init data"
+                (DecodeError "Init data must be hex")
       else
-        let actionNum = case cut.action of
-              Add     => 0
-              Replace => 1
-              Remove  => 2
-        in ok Update "buildSingleFacetCut"
-              ("Built facet cut: " ++ show cut)
-              DIAMOND_CUT_SELECTOR  -- Simplified; would include full encoding
+        -- ABI encode: selector + address (padded) + offset + length + data
+        let addrEncoded = encodeAddress newImpl
+            dataStripped = SHex.stripHexPrefix initData
+            dataLen = strLength dataStripped `div` 2
+            -- Simplified encoding
+            calldata = UPGRADE_TO_AND_CALL_SELECTOR ++ addrEncoded
+        in ok Update "buildUpgradeToAndCall"
+              ("Built upgradeToAndCall(" ++ newImpl ++ ", " ++ show dataLen ++ " bytes)")
+              calldata
+
+||| Build implementation() query calldata
+public export
+buildGetImplementation : String
+buildGetImplementation = IMPLEMENTATION_SELECTOR
 
 -- =============================================================================
--- Dictionary Operations (FRC-compliant)
+-- Upgrade Analysis
 -- =============================================================================
 
-||| Validate dictionary entry
+||| Clone upgrade request (simple, for single clone)
 public export
-validateEntry : DictionaryEntry -> FR ()
-validateEntry entry =
-  if not (isValidSelector entry.selector)
-    then fail Query "validateEntry" "Invalid selector format"
-              (DecodeError ("Selector must be 0x + 8 hex chars: " ++ entry.selector.hex))
-    else if not (SHex.isHexPrefixed entry.impl) || length entry.impl /= 42
-      then fail Query "validateEntry" "Invalid address format"
-                (DecodeError ("Address must be 0x + 40 hex chars: " ++ entry.impl))
-      else ok Query "validateEntry" ("Valid: " ++ show entry) ()
-
-||| Convert DictOperation to FacetCut
-public export
-operationToFacetCut : DictOperation -> FacetCut
-operationToFacetCut (AddEntry e) =
-  MkFacetCut e.impl Add [e.selector]
-operationToFacetCut (RemoveEntry s) =
-  MkFacetCut "0x0000000000000000000000000000000000000000" Remove [s]
-operationToFacetCut (ReplaceEntry e) =
-  MkFacetCut e.impl Replace [e.selector]
-
-||| Build calldata for batch dictionary update
-public export
-buildBatchUpdate :
-  List DictOperation ->
-  FR String
-buildBatchUpdate [] =
-  fail Update "buildBatchUpdate" "Empty operation list"
-       (InvalidState "At least one operation required")
-buildBatchUpdate ops =
-  let cuts = map operationToFacetCut ops
-  in ok Update "buildBatchUpdate"
-        ("Built batch update: " ++ show (length ops) ++ " operations")
-        DIAMOND_CUT_SELECTOR  -- Simplified
-
--- =============================================================================
--- Dictionary Diff Computation
--- =============================================================================
-
-||| Compute operations needed to migrate from old to new implementation
-public export
-computeDiff :
-  List FunctionSelector ->   -- Old implementation selectors
-  List FunctionSelector ->   -- New implementation selectors
-  String ->                  -- New implementation address
-  List DictOperation
-computeDiff oldSels newSels newImpl =
-  let -- Selectors to add (in new but not in old)
-      toAdd = filter (\s => not (s `elem` oldSels)) newSels
-      addOps = map (\s => AddEntry (MkDictionaryEntry s newImpl)) toAdd
-
-      -- Selectors to remove (in old but not in new)
-      toRemove = filter (\s => not (s `elem` newSels)) oldSels
-      removeOps = map RemoveEntry toRemove
-
-      -- Selectors to replace (in both)
-      toReplace = filter (\s => s `elem` oldSels) newSels
-      replaceOps = map (\s => ReplaceEntry (MkDictionaryEntry s newImpl)) toReplace
-
-  in addOps ++ replaceOps ++ removeOps
-
-||| Analyze upgrade impact
-public export
-record UpgradeAnalysis where
-  constructor MkUpgradeAnalysis
-  addedSelectors   : List FunctionSelector
-  removedSelectors : List FunctionSelector
-  replacedSelectors: List FunctionSelector
-  totalOperations  : Nat
+record CloneUpgradeRequest where
+  constructor MkCloneUpgradeRequest
+  cloneAddress : String           -- Clone to upgrade
+  currentImpl : String            -- Current implementation
+  newImpl : String                -- New implementation to upgrade to
+  initCalldata : Maybe String     -- Optional init calldata
 
 public export
-Show UpgradeAnalysis where
-  show a = "UpgradeAnalysis{added=" ++ show (length a.addedSelectors) ++
-           ", removed=" ++ show (length a.removedSelectors) ++
-           ", replaced=" ++ show (length a.replacedSelectors) ++ "}"
+Show CloneUpgradeRequest where
+  show r = "CloneUpgrade{" ++ r.cloneAddress ++ ": " ++
+           r.currentImpl ++ " -> " ++ r.newImpl ++ "}"
 
-||| Analyze dictionary diff
+||| Validate clone upgrade request
 public export
-analyzeUpgrade :
-  List FunctionSelector ->
-  List FunctionSelector ->
-  UpgradeAnalysis
-analyzeUpgrade oldSels newSels =
-  let added = filter (\s => not (s `elem` oldSels)) newSels
-      removed = filter (\s => not (s `elem` newSels)) oldSels
-      replaced = filter (\s => (s `elem` oldSels) && (s `elem` newSels)) newSels
-  in MkUpgradeAnalysis added removed replaced (length added + length removed + length replaced)
+validateCloneUpgradeRequest : CloneUpgradeRequest -> FR ()
+validateCloneUpgradeRequest req = do
+  _ <- validateImplementation req.cloneAddress
+  _ <- validateImplementation req.currentImpl
+  _ <- validateImplementation req.newImpl
+  -- Ensure not upgrading to same implementation
+  if req.currentImpl == req.newImpl
+    then fail Update "validateCloneUpgradeRequest" "Same implementation"
+              (InvalidState "Cannot upgrade to current implementation")
+    else ok Update "validateCloneUpgradeRequest" ("Valid: " ++ show req) ()
+
+||| Build calldata for clone upgrade request
+public export
+buildCloneUpgradeCalldata : CloneUpgradeRequest -> FR String
+buildCloneUpgradeCalldata req = do
+  _ <- validateCloneUpgradeRequest req
+  case req.initCalldata of
+    Nothing => buildUpgradeTo req.newImpl
+    Just initData => buildUpgradeToAndCall req.newImpl initData

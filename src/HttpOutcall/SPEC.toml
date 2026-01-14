@@ -1,0 +1,177 @@
+# HttpOutcall Specification
+# ICP HTTP outcall wrapper with EVM JSON-RPC support
+
+[definitions]
+prefix = "REQ_HTTP"
+
+[[spec_area]]
+name = "HTTP Request Handling"
+
+[[spec]]
+id = "${prefix}_REQ_001"
+title = "Valid URL required"
+invariant = "validateUrl fails with DecodeError for empty/non-HTTPS URLs, succeeds for valid HTTPS"
+
+[[spec_area]]
+name = "EVM JSON-RPC Construction"
+
+[[spec]]
+id = "${prefix}_RPC_001"
+title = "Request ID present"
+invariant = "buildRpcRequest includes id field in JSON"
+
+[[spec]]
+id = "${prefix}_RPC_002"
+title = "Method name included"
+invariant = "buildRpcRequest includes method field with specified method name"
+
+[[spec]]
+id = "${prefix}_RPC_003"
+title = "Params properly JSON encoded"
+invariant = "buildRpcRequest includes params field with JSON array"
+
+[[spec_area]]
+name = "EVM RPC Error Classification"
+
+[[spec]]
+id = "${prefix}_ERR_001"
+title = "Standard error codes mapped"
+invariant = "RPC error codes -32700, -32600 map to RpcParseError, RpcInvalidRequest"
+
+[[spec]]
+id = "${prefix}_ERR_002"
+title = "Execution reverts captured"
+invariant = "Error code 3 maps to RpcExecutionReverted"
+
+[[spec]]
+id = "${prefix}_ERR_003"
+title = "Nonce errors classified"
+invariant = "'nonce too low' in message maps to RpcNonceTooLow"
+
+[[spec]]
+id = "${prefix}_ERR_004"
+title = "Gas errors classified"
+invariant = "Gas-related messages map to RpcGasTooLow"
+
+[[spec]]
+id = "${prefix}_ERR_005"
+title = "Nonce too high classified"
+invariant = "'nonce too high' in message maps to RpcNonceTooHigh"
+
+[[spec]]
+id = "${prefix}_ERR_006"
+title = "Insufficient funds classified"
+invariant = "'insufficient funds' in message maps to RpcInsufficientFunds"
+
+[[spec]]
+id = "${prefix}_ERR_007"
+title = "Gas limit exceeded classified"
+invariant = "'gas limit' in message maps to RpcGasLimitExceeded"
+
+[[spec]]
+id = "${prefix}_ERR_008"
+title = "Replacement underpriced classified"
+invariant = "'replacement' + 'underpriced' in message maps to RpcReplacementUnderpriced"
+
+[[spec]]
+id = "${prefix}_ERR_009"
+title = "Underpriced classified"
+invariant = "'underpriced' (without replacement) maps to RpcUnderpriced"
+
+[[spec]]
+id = "${prefix}_ERR_010"
+title = "Already known classified"
+invariant = "'already known' in message maps to RpcAlreadyKnown"
+
+[[spec]]
+id = "${prefix}_ERR_011"
+title = "Unknown error falls back to ServerError"
+invariant = "Unrecognized message maps to RpcServerError with code"
+
+[[spec_area]]
+name = "Transaction Sending"
+
+[[spec]]
+id = "${prefix}_TX_001"
+title = "Raw tx must be 0x-prefixed"
+invariant = "isHexPrefixed returns false for non-0x-prefixed input"
+
+[[spec]]
+id = "${prefix}_TX_002"
+title = "Address format validated"
+invariant = "Valid address is 0x prefix + 40 hex chars (length 42)"
+
+[[spec]]
+id = "${prefix}_TX_003"
+title = "Transaction hash format validated"
+invariant = "Valid tx hash is 0x prefix + 64 hex chars (length 66)"
+
+[[spec_area]]
+name = "Chain Configuration"
+
+[[spec]]
+id = "${prefix}_CHAIN_001"
+title = "Known chains have config"
+invariant = "getChainConfig returns config for known chainIds"
+
+[[spec]]
+id = "${prefix}_CHAIN_002"
+title = "Unknown chains return Nothing"
+invariant = "getChainConfig returns Nothing for unregistered chainId"
+
+[[spec_area]]
+name = "HTTP Status Classification"
+
+[[spec]]
+id = "${prefix}_STATUS_001"
+title = "Success status range"
+invariant = "isSuccessStatus true for 200-299"
+
+[[spec]]
+id = "${prefix}_STATUS_002"
+title = "Error status range"
+invariant = "isSuccessStatus false for 400+"
+
+[[spec_area]]
+name = "Retry Logic"
+
+[[spec]]
+id = "${prefix}_RETRY_001"
+title = "Timeout is retryable"
+invariant = "isRetryable returns true for HttpTimeout"
+
+[[spec]]
+id = "${prefix}_RETRY_002"
+title = "Rate limited is retryable"
+invariant = "isRetryable returns true for HttpRateLimited"
+
+[[spec]]
+id = "${prefix}_RETRY_003"
+title = "Client error not retryable"
+invariant = "isRetryable returns false for HttpClientError"
+
+[[spec_area]]
+name = "OU Fee Balance"
+
+[[spec]]
+id = "${prefix}_FEE_001"
+title = "Fee calldata format"
+invariant = "buildGetFeeBalanceCalldata returns selector + encoded principal"
+
+[[spec]]
+id = "${prefix}_FEE_002"
+title = "Invalid contract rejected"
+invariant = "getOUFeeBalance fails with DecodeError for invalid contract address"
+
+[[spec]]
+id = "${prefix}_FEE_003"
+title = "Invalid principal rejected"
+invariant = "getOUFeeBalance fails with DecodeError for short principal"
+
+[[spec_area]]
+name = "HTTP Failure Mapping"
+
+[[spec]]
+id = "${prefix}_FAIL_001"
+title = "HttpFail maps to appropriate Fail type"
+invariant = "httpFailToFail converts HttpFail to Fail maintaining error semantics"
