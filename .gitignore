@@ -42,3 +42,10 @@ id_rsa*
 *.wasm
 *.so
 *.dylib
+
+# DFX local state
+.dfx/
+
+# Foundry build artifacts
+cache/
+out/
