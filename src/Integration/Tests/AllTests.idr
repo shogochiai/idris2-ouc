@@ -3,10 +3,13 @@
 module Integration.Tests.AllTests
 
 import FRMonad.Core
-import OUC.Core
+import OUC.Functions.Core
 import AuditorPool.Core
+import AuditorPool.Tests.VoteTests
 import Rewards.Core
 import Proposals.Core
+import Economics.Tests.FeeToCyclesE2E
+import Economics.Tests.AllTests as EconTests
 import Data.List
 import Data.String
 
@@ -26,10 +29,10 @@ record TestDef where
 
 ||| Create a test definition
 public export
-test : String -> String -> IO Bool -> TestDef
-test = MkTestDef
+test : String -> String -> IO Bool -> Integration.Tests.AllTests.TestDef
+test = Integration.Tests.AllTests.MkTestDef
 
-runOne : TestDef -> IO Bool
+runOne : Integration.Tests.AllTests.TestDef -> IO Bool
 runOne t = do
   result <- t.testFn
   putStrLn $ (if result then "[PASS]" else "[FAIL]") ++ " " ++ t.testId ++ ": " ++ t.testName
@@ -37,7 +40,7 @@ runOne t = do
 
 ||| Run a test suite and report results
 export
-runTestSuite : String -> List TestDef -> IO ()
+runTestSuite : String -> List Integration.Tests.AllTests.TestDef -> IO ()
 runTestSuite suiteName tests = do
   putStrLn $ "Running " ++ suiteName ++ " tests..."
   results <- traverse runOne tests
@@ -870,7 +873,7 @@ test_evidence_chain = do
 -- =============================================================================
 
 public export
-allTests : List TestDef
+allTests : List Integration.Tests.AllTests.TestDef
 allTests =
   [ test "REQ_INT_PIPE_001" "Full proposal->execution pipeline" test_full_pipeline
   , test "REQ_INT_PIPE_002" "Proposal rejection workflow" test_rejection_workflow
@@ -938,11 +941,29 @@ allTests =
 -- Main Entry Point
 -- =============================================================================
 
+-- E2E tests converted to TestDef format
+e2eToTestDef : Economics.Tests.FeeToCyclesE2E.TestResult -> Integration.Tests.AllTests.TestDef
+e2eToTestDef r = Integration.Tests.AllTests.MkTestDef r.testId r.testName (pure r.passed)
+
+e2eTestDefs : List Integration.Tests.AllTests.TestDef
+e2eTestDefs = map e2eToTestDef allE2ETests
+
+-- Convert vote tests tuple format to TestDef
+voteToTestDef : (String, String, IO Bool) -> Integration.Tests.AllTests.TestDef
+voteToTestDef (id, name, fn) = Integration.Tests.AllTests.MkTestDef id name fn
+
+voteTestDefs : List Integration.Tests.AllTests.TestDef
+voteTestDefs = map voteToTestDef voteTests
+
 ||| Run all tests (required by idris2-coverage UnifiedRunner)
 export
 runAllTests : IO ()
-runAllTests = runTestSuite "Integration" allTests
+runAllTests = do
+  Integration.Tests.AllTests.runTestSuite "Integration" Integration.Tests.AllTests.allTests
+  Integration.Tests.AllTests.runTestSuite "Fee-to-Cycles E2E" e2eTestDefs
+  Integration.Tests.AllTests.runTestSuite "Vote (n-of-m threshold)" voteTestDefs
+  EconTests.runAllTests
 
 ||| Main entry point
 main : IO ()
-main = runAllTests
+main = Integration.Tests.AllTests.runAllTests

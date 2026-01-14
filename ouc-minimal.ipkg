@@ -5,7 +5,30 @@ brief   = "Minimal build to test compilation"
 
 sourcedir = "src"
 
--- Only the lightest modules
+depends = idris2-cdk
+
+-- Test OUC restructure
 modules = Util.StringHex
         , Util.StringCase
-        , HttpOutcall.TxSender.Types
+        -- Candid Encoding (new)
+        , Candid.Hash
+        , Candid.Leb128
+        , Candid.Encoder
+        , Candid.Chain
+        , Candid.EvmRpc
+        , Candid.FFI
+        , Candid.Tests.AllTests
+        -- OUC Core
+        , OUC.Functions.Core
+        , OUC.Functions.Signatures
+        , OUC.Functions.MultiSig
+        , OUC.Functions.Relay
+        , OUC.Functions.Lifecycle
+        , OUC.Functions.Obligations
+        -- , OUC.Functions.Feedback  -- has existing bugs
+        , AuditorPool.Core
+        , Proposals.Core
+        , Rewards.Core
+        -- Storages
+        , OUC.Storages.State
+        , OUC.Storages.SourceOfTruth

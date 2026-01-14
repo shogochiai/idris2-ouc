@@ -15,18 +15,32 @@
 ||| - 1: Get version (returns 1)
 ||| - 2: Get proposal count
 ||| - 3: Get auditor count
+||| - 4: Get proposal by ID (arg[1] = proposal ID)
 |||
 ||| Commands (Update):
 ||| - 10: Register auditor (simple test version)
 ||| - 11: Suspend auditor (by index in arg[1])
 ||| - 12: Reactivate auditor (by index in arg[1])
 |||
+||| Commands (Economics/Timer):
+||| - 20: Heartbeat (arg[1] = timestamp) - daily tier processing
+||| - 21: Get scheduler stats (arg[1] = timestamp)
+||| - 22: Register protocol (arg[1] = chainId, arg[2] = timestamp)
+||| - 23: Donate to protocol (arg[1] = index, arg[2] = amount, arg[3] = timestamp)
+|||
 ||| Result codes: 1 = success, 0 = not found, -1 = error
 module Main
 
-import OUC.Core
+import OUC.Functions.Core
 import AuditorPool.Core
 import FRMonad.Core
+import Economics.Tier
+import Economics.ProtocolAccount
+import Economics.Scheduler
+import MultiChain.Registry
+import Candid.FFI
+import Candid.Chain
+import Data.Bits
 import Data.IORef
 import Data.List
 import System
@@ -90,6 +104,15 @@ incCBackedAuditorCount = primIO prim__incAuditorCount
 %noinline
 globalStateRef : IORef (Maybe OUCState)
 globalStateRef = unsafePerformIO $ newIORef Nothing
+
+||| Global Economics state references
+%noinline
+globalAccountRegistryRef : IORef AccountRegistry
+globalAccountRegistryRef = unsafePerformIO $ newIORef Economics.ProtocolAccount.emptyRegistry
+
+%noinline
+globalSchedulerRef : IORef SchedulerState
+globalSchedulerRef = unsafePerformIO $ newIORef initialSchedulerState
 
 ||| Initialize OUC state with anonymous principal
 export
@@ -168,6 +191,9 @@ CMD_GET_PROPOSAL_COUNT = 2
 CMD_GET_AUDITOR_COUNT : Int
 CMD_GET_AUDITOR_COUNT = 3
 
+CMD_GET_PROPOSAL : Int
+CMD_GET_PROPOSAL = 4
+
 -- Update commands (10+)
 CMD_REGISTER_AUDITOR : Int
 CMD_REGISTER_AUDITOR = 10
@@ -177,6 +203,41 @@ CMD_SUSPEND_AUDITOR = 11
 
 CMD_REACTIVATE_AUDITOR : Int
 CMD_REACTIVATE_AUDITOR = 12
+
+CMD_SUBMIT_PROPOSAL : Int
+CMD_SUBMIT_PROPOSAL = 13
+
+-- Timer/Heartbeat commands (20+)
+CMD_HEARTBEAT : Int
+CMD_HEARTBEAT = 20
+
+CMD_GET_SCHEDULER_STATS : Int
+CMD_GET_SCHEDULER_STATS = 21
+
+CMD_REGISTER_PROTOCOL : Int
+CMD_REGISTER_PROTOCOL = 22
+
+CMD_DONATE_TO_PROTOCOL : Int
+CMD_DONATE_TO_PROTOCOL = 23
+
+-- =============================================================================
+-- Query Functions (by ID)
+-- =============================================================================
+
+||| Get proposal by ID
+||| Returns: 1 = found, 0 = not found, -1 = error
+||| Note: For MVP, just checks if ID is valid (< proposal count)
+doGetProposal : IO ()
+doGetProposal = do
+  proposalId <- getArg 1
+  mstate <- ensureState
+  case mstate of
+    Nothing => setResult (-1)  -- State not initialized
+    Just st => do
+      let proposals = st.proposals
+      if cast proposalId < length proposals
+        then setResult 1  -- Found
+        else setResult 0  -- Not found
 
 -- =============================================================================
 -- Update Functions (modify global state)
@@ -242,6 +303,130 @@ doReactivateAuditor = do
                   writeIORef globalStateRef (Just newState)
                   setResult 1
 
+||| Submit a new upgrade proposal
+||| Returns: proposal ID (>=0) on success, -1 on error
+||| MVP: Uses dummy values for chain, target, etc. (rationale comes from C but not passed yet)
+doSubmitProposal : IO ()
+doSubmitProposal = do
+  mstate <- ensureState
+  case mstate of
+    Nothing => setResult (-1)  -- State not initialized
+    Just st => do
+      -- MVP: Use dummy values for required parameters
+      let chainId = MkChainId 1  -- Ethereum mainnet
+          target = MkEvmAddress "0x0000000000000000000000000000000000000000"
+          newImpl = MkEvmAddress "0x0000000000000000000000000000000000000001"
+          ou = MkEvmAddress "0x0000000000000000000000000000000000000002"  -- OU address
+          proposer = MkICPrincipal "aaaaa-aa"
+          rationale = "MVP test proposal"  -- TODO: Pass from C
+          codeHash = "0x0"
+          now = 0  -- Nat timestamp (nanoseconds)
+      case submitProposal st chainId target newImpl ou proposer rationale codeHash now of
+        Fail _ _ => setResult (-1)
+        Ok (newState, pid) _ => do
+          writeIORef globalStateRef (Just newState)
+          setResult (cast pid.value)  -- Return proposal ID
+
+-- =============================================================================
+-- Economics Functions (Timer/Heartbeat)
+-- =============================================================================
+
+||| Process heartbeat - called by canister timer
+||| arg[1] = current timestamp (seconds)
+||| Returns: number of accounts processed
+doHeartbeat : IO ()
+doHeartbeat = do
+  initialized <- getStateInitialized
+  case initialized of
+    1 => do
+      timestamp <- getArg 1
+      sched <- readIORef globalSchedulerRef
+      reg <- readIORef globalAccountRegistryRef
+      let result = processHeartbeat sched reg (cast timestamp)
+      writeIORef globalSchedulerRef result.scheduler
+      writeIORef globalAccountRegistryRef result.registry
+      setResult (cast result.accountsProcessed)
+    _ => setResult (-1)
+
+||| Get scheduler statistics
+||| arg[1] = current timestamp (seconds)
+||| Returns: pending sync count
+doGetSchedulerStats : IO ()
+doGetSchedulerStats = do
+  timestamp <- getArg 1
+  sched <- readIORef globalSchedulerRef
+  reg <- readIORef globalAccountRegistryRef
+  let stats = getSchedulerStats sched reg (cast timestamp)
+  setResult (cast stats.pendingSyncs)
+
+||| Register a new protocol for monitoring
+||| arg[1] = chain ID
+||| Uses dummy address for MVP (real impl would read address from C buffer)
+||| Returns: 1 = success
+doRegisterProtocol : IO ()
+doRegisterProtocol = do
+  initialized <- getStateInitialized
+  case initialized of
+    1 => do
+      chainIdArg <- getArg 1
+      timestamp <- getArg 2
+      reg <- readIORef globalAccountRegistryRef
+      -- MVP: Generate dummy address based on account count
+      let addrHex = "0x" ++ pack (replicate 40 '0')  -- Placeholder
+          addr = MkEvmAddress addrHex
+          chainId = MkChainId (cast chainIdArg)
+          newAcc = createAccount addr chainId (cast timestamp)
+          newReg = upsertAccount reg newAcc (cast timestamp)
+      writeIORef globalAccountRegistryRef newReg
+      setResult 1
+    _ => setResult (-1)
+
+||| Donate cycles to a protocol
+||| arg[1] = protocol index in registry
+||| arg[2] = amount (small value for testing)
+||| arg[3] = current timestamp
+||| Returns: new tier (0=Archive, 1=Economy, 2=Standard, 3=RealTime)
+doDonateToProtocol : IO ()
+doDonateToProtocol = do
+  initialized <- getStateInitialized
+  case initialized of
+    1 => do
+      idx <- getArg 1
+      amount <- getArg 2
+      timestamp <- getArg 3
+      reg <- readIORef globalAccountRegistryRef
+      case getAt (cast idx) reg.accounts of
+        Nothing => setResult (-1)  -- Protocol not found
+        Just acc => do
+          let result = donate acc (cast amount) (cast timestamp)
+              tierNum : Int = case result.newTier of
+                Archive  => 0
+                Economy  => 1
+                Standard => 2
+                RealTime => 3
+          writeIORef globalAccountRegistryRef (upsertAccount reg result.account (cast timestamp))
+          setResult tierNum
+    _ => setResult (-1)
+
+-- =============================================================================
+-- Candid Encoding Commands
+-- =============================================================================
+
+||| Encode EVM RPC request to Candid buffer
+||| arg[1] = chainId (1=EthMainnet, 11155111=Sepolia, 8453=Base, 42161=Arbitrum)
+||| arg[2] = maxResponseBytes (low 32 bits)
+||| JSON is read from ouc_json_buf (set by C via ouc_c_set_json)
+||| Result written to ouc_candid_buf, length returned in result
+||| Returns: length of encoded Candid, or -1 if unknown chain
+doEncodeEvmRpc : IO ()
+doEncodeEvmRpc = do
+  chainIdArg <- getArg 1
+  maxBytesArg <- getArg 2
+  let chainId : Int32 = cast chainIdArg
+      maxBytes : Bits64 = cast maxBytesArg
+  result <- encodeEvmRpcFromBuffer chainId maxBytes
+  setResult result
+
 ||| Dispatch command and write result
 ||| C sets arg[0] = command, calls main/dispatch, reads result
 ||| NOTE: == operator fixed in Idris2 PR #3708 for RefC/WASM32.
@@ -259,10 +444,19 @@ dispatchCommand = do
     3 => do                                 -- CMD_GET_AUDITOR_COUNT
            count <- getAuditorCount
            setResult (cast count)
+    4 => doGetProposal                      -- CMD_GET_PROPOSAL
     -- Update commands (10+)
     10 => doRegisterAuditor                 -- CMD_REGISTER_AUDITOR
     11 => doSuspendAuditor                  -- CMD_SUSPEND_AUDITOR
     12 => doReactivateAuditor               -- CMD_REACTIVATE_AUDITOR
+    13 => doSubmitProposal                  -- CMD_SUBMIT_PROPOSAL
+    -- Economics/Timer commands (20+)
+    20 => doHeartbeat                       -- CMD_HEARTBEAT
+    21 => doGetSchedulerStats               -- CMD_GET_SCHEDULER_STATS
+    22 => doRegisterProtocol                -- CMD_REGISTER_PROTOCOL
+    23 => doDonateToProtocol                -- CMD_DONATE_TO_PROTOCOL
+    -- Candid encoding commands (100+)
+    100 => doEncodeEvmRpc                   -- CMD_ENCODE_EVM_RPC
     _  => setResult (-1)                    -- Unknown command
 
 -- =============================================================================

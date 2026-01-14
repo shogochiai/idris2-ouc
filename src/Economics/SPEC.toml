@@ -2,7 +2,7 @@
 # A-Life Economics: Self-sustaining protocol operation via tiered service model
 
 [definitions]
-prefix = "ECON"
+prefix = "REQ_ECON"
 
 # =============================================================================
 # TIER SYSTEM (Tier.idr)

@@ -9,7 +9,7 @@
 module Rewards.Core
 
 import FRMonad.Core
-import OUC.Core
+import OUC.Functions.Core
 import Data.List
 import Data.Nat
 

@@ -873,92 +873,92 @@ test_stagger_determinism = do
 public export
 allTests : List TestDef
 allTests =
-  [ test "ECON_TIER_001" "Tier ordering" test_tier_ordering
-  , test "ECON_TIER_002" "Tier Eq instances" test_tier_eq
-  , test "ECON_TIER_003" "Tier Show instances" test_tier_show
-  , test "ECON_TIER_004" "Tier serialization roundtrip" test_tier_serialization
-  , test "ECON_TIER_005" "Tier cost ordering (type check)" test_tier_cost_ordering
-  , test "ECON_TIER_006" "Tier sync intervals ordered" test_tier_sync_intervals
-  , test "ECON_TIER_007" "Tier syncs per day ordered" test_tier_syncs_per_day
-  , test "ECON_TIER_008" "allTiers list complete" test_all_tiers
-  , test "ECON_ACCT_001" "New account at Archive" test_new_account_archive
-  , test "ECON_ACCT_002" "Account fields set correctly" test_account_fields
-  , test "ECON_ACCT_003" "Account Eq instance" test_account_eq
-  , test "ECON_ACCT_004" "Empty registry" test_empty_registry
-  , test "ECON_ACCT_005" "Registry upsert" test_registry_upsert
-  , test "ECON_ACCT_006" "Registry find" test_registry_find
-  , test "ECON_ACCT_007" "Tier distribution" test_tier_distribution
-  , test "ECON_ACCT_008" "Record sync" test_record_sync
-  , test "ECON_ACCT_009" "Donation result fields" test_donation_result_fields
-  , test "ECON_ACCT_010" "Deduction result fields" test_deduction_result_fields
+  [ test "REQ_ECON_TIER_001" "Tier ordering" test_tier_ordering
+  , test "REQ_ECON_TIER_002" "Tier Eq instances" test_tier_eq
+  , test "REQ_ECON_TIER_003" "Tier Show instances" test_tier_show
+  , test "REQ_ECON_TIER_004" "Tier serialization roundtrip" test_tier_serialization
+  , test "REQ_ECON_TIER_005" "Tier cost ordering (type check)" test_tier_cost_ordering
+  , test "REQ_ECON_TIER_006" "Tier sync intervals ordered" test_tier_sync_intervals
+  , test "REQ_ECON_TIER_007" "Tier syncs per day ordered" test_tier_syncs_per_day
+  , test "REQ_ECON_TIER_008" "allTiers list complete" test_all_tiers
+  , test "REQ_ECON_ACCT_001" "New account at Archive" test_new_account_archive
+  , test "REQ_ECON_ACCT_002" "Account fields set correctly" test_account_fields
+  , test "REQ_ECON_ACCT_003" "Account Eq instance" test_account_eq
+  , test "REQ_ECON_ACCT_004" "Empty registry" test_empty_registry
+  , test "REQ_ECON_ACCT_005" "Registry upsert" test_registry_upsert
+  , test "REQ_ECON_ACCT_006" "Registry find" test_registry_find
+  , test "REQ_ECON_ACCT_007" "Tier distribution" test_tier_distribution
+  , test "REQ_ECON_ACCT_008" "Record sync" test_record_sync
+  , test "REQ_ECON_ACCT_009" "Donation result fields" test_donation_result_fields
+  , test "REQ_ECON_ACCT_010" "Deduction result fields" test_deduction_result_fields
   -- Scheduler tests
-  , test "ECON_SCHED_001" "Initial scheduler state" test_initial_scheduler
-  , test "ECON_SCHED_002" "Timestamp to day" test_timestamp_to_day
-  , test "ECON_SCHED_003" "isNewDay detection" test_is_new_day
-  , test "ECON_SCHED_004" "Heartbeat no day change" test_heartbeat_no_change
-  , test "ECON_SCHED_005" "Heartbeat day change" test_heartbeat_day_change
-  , test "ECON_SCHED_006" "Batch sync grouping" test_batch_sync_grouping
-  , test "ECON_SCHED_007" "Scheduler stats" test_scheduler_stats
+  , test "REQ_ECON_SCHED_001" "Initial scheduler state" test_initial_scheduler
+  , test "REQ_ECON_SCHED_002" "Timestamp to day" test_timestamp_to_day
+  , test "REQ_ECON_SCHED_003" "isNewDay detection" test_is_new_day
+  , test "REQ_ECON_SCHED_004" "Heartbeat no day change" test_heartbeat_no_change
+  , test "REQ_ECON_SCHED_005" "Heartbeat day change" test_heartbeat_day_change
+  , test "REQ_ECON_SCHED_006" "Batch sync grouping" test_batch_sync_grouping
+  , test "REQ_ECON_SCHED_007" "Scheduler stats" test_scheduler_stats
   -- Status tests (ECON-006, 007 scenarios)
-  , test "ECON_STATUS_001" "Initial status is Active" test_initial_status_active
-  , test "ECON_STATUS_002" "canOperate with sufficient cycles" test_can_operate_sufficient
-  , test "ECON_STATUS_003" "canOperate with insufficient cycles" test_can_operate_insufficient
-  , test "ECON_STATUS_004" "Cycles depletion triggers suspension" test_cycles_depletion
-  , test "ECON_STATUS_005" "Start recovery from Suspended" test_start_recovery
-  , test "ECON_STATUS_006" "Cannot start recovery from Active" test_no_recovery_from_active
-  , test "ECON_STATUS_007" "Recovery progress tracking" test_recovery_progress
-  , test "ECON_STATUS_008" "Recovery completion" test_recovery_complete
-  , test "ECON_STATUS_009" "Status serialization roundtrip" test_status_serialization
-  , test "ECON_STATUS_010" "Top-up trigger check" test_topup_trigger
+  , test "REQ_ECON_STATUS_001" "Initial status is Active" test_initial_status_active
+  , test "REQ_ECON_STATUS_002" "canOperate with sufficient cycles" test_can_operate_sufficient
+  , test "REQ_ECON_STATUS_003" "canOperate with insufficient cycles" test_can_operate_insufficient
+  , test "REQ_ECON_STATUS_004" "Cycles depletion triggers suspension" test_cycles_depletion
+  , test "REQ_ECON_STATUS_005" "Start recovery from Suspended" test_start_recovery
+  , test "REQ_ECON_STATUS_006" "Cannot start recovery from Active" test_no_recovery_from_active
+  , test "REQ_ECON_STATUS_007" "Recovery progress tracking" test_recovery_progress
+  , test "REQ_ECON_STATUS_008" "Recovery completion" test_recovery_complete
+  , test "REQ_ECON_STATUS_009" "Status serialization roundtrip" test_status_serialization
+  , test "REQ_ECON_STATUS_010" "Top-up trigger check" test_topup_trigger
   -- CatchUpSync tests (ECON-004)
-  , test "ECON_CATCHUP_001" "Blocks to sync calculation" test_blocks_to_sync
-  , test "ECON_CATCHUP_002" "Calls needed calculation" test_calls_needed
-  , test "ECON_CATCHUP_003" "Cost calculation 1 month" test_catchup_cost_1month
-  , test "ECON_CATCHUP_004" "Cost calculation 6 months" test_catchup_cost_6months
-  , test "ECON_CATCHUP_005" "Create catch-up request" test_create_catchup_request
-  , test "ECON_CATCHUP_006" "Start catch-up to InProgress" test_start_catchup
-  , test "ECON_CATCHUP_007" "Process batch updates progress" test_process_batch
-  , test "ECON_CATCHUP_008" "Catch-up completes" test_catchup_completes
-  , test "ECON_CATCHUP_009" "Sync progress percentage" test_sync_progress
-  , test "ECON_CATCHUP_010" "Blocks remaining calculation" test_blocks_remaining
+  , test "REQ_ECON_CATCHUP_001" "Blocks to sync calculation" test_blocks_to_sync
+  , test "REQ_ECON_CATCHUP_002" "Calls needed calculation" test_calls_needed
+  , test "REQ_ECON_CATCHUP_003" "Cost calculation 1 month" test_catchup_cost_1month
+  , test "REQ_ECON_CATCHUP_004" "Cost calculation 6 months" test_catchup_cost_6months
+  , test "REQ_ECON_CATCHUP_005" "Create catch-up request" test_create_catchup_request
+  , test "REQ_ECON_CATCHUP_006" "Start catch-up to InProgress" test_start_catchup
+  , test "REQ_ECON_CATCHUP_007" "Process batch updates progress" test_process_batch
+  , test "REQ_ECON_CATCHUP_008" "Catch-up completes" test_catchup_completes
+  , test "REQ_ECON_CATCHUP_009" "Sync progress percentage" test_sync_progress
+  , test "REQ_ECON_CATCHUP_010" "Blocks remaining calculation" test_blocks_remaining
   -- RecoveryOrchestrator tests
-  , test "ECON_RECOVERY_001" "Initial recovery context" test_initial_recovery_context
-  , test "ECON_RECOVERY_002" "Initiate recovery from Suspended" test_initiate_from_suspended
-  , test "ECON_RECOVERY_003" "Initiate from Active (not needed)" test_initiate_from_active
-  , test "ECON_RECOVERY_004" "Insufficient donation rejected" test_insufficient_donation
-  , test "ECON_RECOVERY_005" "Recovery batch progress" test_recovery_batch_progress
-  , test "ECON_RECOVERY_006" "Recovery batch completion" test_recovery_batch_complete
-  , test "ECON_RECOVERY_007" "Abort recovery" test_abort_recovery
-  , test "ECON_RECOVERY_008" "isRecovering check" test_is_recovering
-  , test "ECON_RECOVERY_009" "getRecoveryProgress" test_get_recovery_progress
-  , test "ECON_RECOVERY_010" "getBlocksRemaining" test_get_blocks_remaining
+  , test "REQ_ECON_RECOVERY_001" "Initial recovery context" test_initial_recovery_context
+  , test "REQ_ECON_RECOVERY_002" "Initiate recovery from Suspended" test_initiate_from_suspended
+  , test "REQ_ECON_RECOVERY_003" "Initiate from Active (not needed)" test_initiate_from_active
+  , test "REQ_ECON_RECOVERY_004" "Insufficient donation rejected" test_insufficient_donation
+  , test "REQ_ECON_RECOVERY_005" "Recovery batch progress" test_recovery_batch_progress
+  , test "REQ_ECON_RECOVERY_006" "Recovery batch completion" test_recovery_batch_complete
+  , test "REQ_ECON_RECOVERY_007" "Abort recovery" test_abort_recovery
+  , test "REQ_ECON_RECOVERY_008" "isRecovering check" test_is_recovering
+  , test "REQ_ECON_RECOVERY_009" "getRecoveryProgress" test_get_recovery_progress
+  , test "REQ_ECON_RECOVERY_010" "getBlocksRemaining" test_get_blocks_remaining
   -- BatchOptimizer tests
-  , test "ECON_BATCH_001" "Priority RealTime > Standard" test_priority_realtime_higher
-  , test "ECON_BATCH_002" "Priority Archive lowest" test_priority_archive_lowest
-  , test "ECON_BATCH_003" "Sort by priority descending" test_sort_by_priority
-  , test "ECON_BATCH_004" "Batch cost estimation" test_batch_cost_estimation
-  , test "ECON_BATCH_005" "Stagger slot calculation" test_stagger_slot
-  , test "ECON_BATCH_006" "Schedule empty registry" test_schedule_empty
-  , test "ECON_BATCH_007" "Schedule respects budget" test_schedule_budget
-  , test "ECON_BATCH_008" "Get next batch" test_get_next_batch
-  , test "ECON_BATCH_009" "Completion time estimation" test_completion_time
-  , test "ECON_BATCH_010" "Get all scheduled protocols" test_all_scheduled_protocols
+  , test "REQ_ECON_BATCH_001" "Priority RealTime > Standard" test_priority_realtime_higher
+  , test "REQ_ECON_BATCH_002" "Priority Archive lowest" test_priority_archive_lowest
+  , test "REQ_ECON_BATCH_003" "Sort by priority descending" test_sort_by_priority
+  , test "REQ_ECON_BATCH_004" "Batch cost estimation" test_batch_cost_estimation
+  , test "REQ_ECON_BATCH_005" "Stagger slot calculation" test_stagger_slot
+  , test "REQ_ECON_BATCH_006" "Schedule empty registry" test_schedule_empty
+  , test "REQ_ECON_BATCH_007" "Schedule respects budget" test_schedule_budget
+  , test "REQ_ECON_BATCH_008" "Get next batch" test_get_next_batch
+  , test "REQ_ECON_BATCH_009" "Completion time estimation" test_completion_time
+  , test "REQ_ECON_BATCH_010" "Get all scheduled protocols" test_all_scheduled_protocols
   -- Boundary condition tests
-  , test "ECON_EDGE_001" "Zero blocks to sync" test_zero_blocks_to_sync
-  , test "ECON_EDGE_002" "Zero blocks cost" test_zero_blocks_cost
-  , test "ECON_EDGE_003" "Underflow protection" test_block_range_underflow
-  , test "ECON_EDGE_004" "Zero timestamp" test_zero_timestamp
-  , test "ECON_EDGE_005" "Sync progress 0%" test_sync_progress_zero
-  , test "ECON_EDGE_006" "Sync progress 100%" test_sync_progress_hundred
-  , test "ECON_EDGE_007" "Zero block range" test_zero_block_range
-  , test "ECON_EDGE_008" "Single block sync" test_single_block_sync
-  , test "ECON_EDGE_009" "Exact batch boundary" test_calls_exact_boundary
-  , test "ECON_EDGE_010" "Over batch boundary" test_calls_over_boundary
-  , test "ECON_EDGE_011" "Empty tier distribution" test_empty_tier_distribution
-  , test "ECON_EDGE_012" "Zero donation recovery" test_recovery_zero_donation
-  , test "ECON_EDGE_013" "Zero staleness priority" test_priority_zero_staleness
-  , test "ECON_EDGE_014" "Single protocol batch" test_single_protocol_batch
-  , test "ECON_EDGE_015" "Stagger determinism" test_stagger_determinism
+  , test "REQ_ECON_EDGE_001" "Zero blocks to sync" test_zero_blocks_to_sync
+  , test "REQ_ECON_EDGE_002" "Zero blocks cost" test_zero_blocks_cost
+  , test "REQ_ECON_EDGE_003" "Underflow protection" test_block_range_underflow
+  , test "REQ_ECON_EDGE_004" "Zero timestamp" test_zero_timestamp
+  , test "REQ_ECON_EDGE_005" "Sync progress 0%" test_sync_progress_zero
+  , test "REQ_ECON_EDGE_006" "Sync progress 100%" test_sync_progress_hundred
+  , test "REQ_ECON_EDGE_007" "Zero block range" test_zero_block_range
+  , test "REQ_ECON_EDGE_008" "Single block sync" test_single_block_sync
+  , test "REQ_ECON_EDGE_009" "Exact batch boundary" test_calls_exact_boundary
+  , test "REQ_ECON_EDGE_010" "Over batch boundary" test_calls_over_boundary
+  , test "REQ_ECON_EDGE_011" "Empty tier distribution" test_empty_tier_distribution
+  , test "REQ_ECON_EDGE_012" "Zero donation recovery" test_recovery_zero_donation
+  , test "REQ_ECON_EDGE_013" "Zero staleness priority" test_priority_zero_staleness
+  , test "REQ_ECON_EDGE_014" "Single protocol batch" test_single_protocol_batch
+  , test "REQ_ECON_EDGE_015" "Stagger determinism" test_stagger_determinism
   ]
 
 -- E2E tests converted to TestDef format

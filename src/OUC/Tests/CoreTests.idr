@@ -2,7 +2,7 @@
 module OUC.Tests.CoreTests
 
 import FRMonad.Core
-import OUC.Core
+import OUC.Functions.Core
 import Data.List
 
 %default covering

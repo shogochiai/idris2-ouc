@@ -127,3 +127,193 @@ invariant = "Returns proposals in UnderReview status"
 id = "${prefix}_AWAIT_002"
 title = "getAwaitingReview excludes Approved"
 invariant = "Approved proposals not included"
+
+[[spec_area]]
+name = "AuditorPool Registration Coverage"
+
+[[spec]]
+id = "${prefix}_POOL_001"
+title = "registerAuditor with sufficient stake"
+invariant = "Auditor with stake >= minStake is registered successfully"
+
+[[spec]]
+id = "${prefix}_POOL_002"
+title = "registerAuditor with insufficient stake"
+invariant = "Auditor with stake < minStake returns Unauthorized"
+
+[[spec]]
+id = "${prefix}_POOL_003"
+title = "registerAuditor duplicate"
+invariant = "Re-registering existing auditor returns Conflict"
+
+[[spec_area]]
+name = "AuditorPool Selection Coverage"
+
+[[spec]]
+id = "${prefix}_POOL_004"
+title = "selectAuditor ByReputation"
+invariant = "ByReputation selects auditor with highest reputation"
+
+[[spec]]
+id = "${prefix}_POOL_005"
+title = "selectAuditor ByAvailability"
+invariant = "ByAvailability selects auditor with fewest reviews"
+
+[[spec]]
+id = "${prefix}_POOL_006"
+title = "selectAuditor with no auditors"
+invariant = "Empty pool returns NotFound"
+
+[[spec]]
+id = "${prefix}_POOL_007"
+title = "selectAuditor Weighted"
+invariant = "Weighted selects by reputation * stake"
+
+[[spec_area]]
+name = "AuditorPool Slashing Coverage"
+
+[[spec]]
+id = "${prefix}_POOL_008"
+title = "slashAuditor success"
+invariant = "Slashing deducts slashPercentage and sets status=Slashed"
+
+[[spec]]
+id = "${prefix}_POOL_009"
+title = "slashAuditor not found"
+invariant = "Slashing non-existent auditor returns NotFound"
+
+[[spec_area]]
+name = "AuditorPool Status Transitions"
+
+[[spec]]
+id = "${prefix}_POOL_010"
+title = "suspendAuditor success"
+invariant = "Active auditor can be suspended"
+
+[[spec]]
+id = "${prefix}_POOL_011"
+title = "reactivateAuditor from Suspended"
+invariant = "Suspended auditor can be reactivated"
+
+[[spec]]
+id = "${prefix}_POOL_012"
+title = "reactivateAuditor from Slashed fails"
+invariant = "Slashed auditor cannot be reactivated"
+
+[[spec_area]]
+name = "AuditorPool Reputation Updates"
+
+[[spec]]
+id = "${prefix}_POOL_013"
+title = "updateReputation positive delta"
+invariant = "Positive delta increases reputation"
+
+[[spec]]
+id = "${prefix}_POOL_014"
+title = "updateReputation negative delta"
+invariant = "Negative delta decreases reputation"
+
+[[spec]]
+id = "${prefix}_POOL_015"
+title = "updateReputation caps at 1000"
+invariant = "Reputation cannot exceed 1000"
+
+[[spec_area]]
+name = "Rewards Fee Collection"
+
+[[spec]]
+id = "${prefix}_RWD_001"
+title = "collectFee with sufficient amount"
+invariant = "Fee >= proposalFee is collected and treasury updated"
+
+[[spec]]
+id = "${prefix}_RWD_002"
+title = "collectFee with insufficient amount"
+invariant = "Fee < proposalFee returns Unauthorized"
+
+[[spec_area]]
+name = "Rewards Queue Management"
+
+[[spec]]
+id = "${prefix}_RWD_003"
+title = "queueReward with existing fee"
+invariant = "Reward is queued when fee exists for proposal"
+
+[[spec]]
+id = "${prefix}_RWD_004"
+title = "queueReward without fee"
+invariant = "Queueing reward without fee returns NotFound"
+
+[[spec_area]]
+name = "Rewards Distribution"
+
+[[spec]]
+id = "${prefix}_RWD_005"
+title = "distributeReward with pending reward"
+invariant = "Pending reward is distributed and removed from queue"
+
+[[spec]]
+id = "${prefix}_RWD_006"
+title = "distributeReward with no pending"
+invariant = "Distributing non-existent reward returns NotFound"
+
+[[spec]]
+id = "${prefix}_RWD_007"
+title = "getPendingReward returns sum"
+invariant = "Returns sum of all pending rewards for auditor"
+
+[[spec]]
+id = "${prefix}_RWD_008"
+title = "getTreasuryBalance"
+invariant = "Returns correct treasury balance after fees"
+
+[[spec]]
+id = "${prefix}_RWD_009"
+title = "calculateReward with bonuses"
+invariant = "Quality and speed bonuses increase reward"
+
+[[spec_area]]
+name = "Proposal Validation"
+
+[[spec]]
+id = "${prefix}_VAL_001"
+title = "validateProposal with valid chain"
+invariant = "Proposal on active configured chain returns Valid"
+
+[[spec]]
+id = "${prefix}_VAL_002"
+title = "validateProposal with unknown chain"
+invariant = "Proposal on unconfigured chain returns InvalidChain"
+
+[[spec]]
+id = "${prefix}_VAL_003"
+title = "validateProposal with inactive chain"
+invariant = "Proposal on inactive chain returns InvalidChain"
+
+[[spec]]
+id = "${prefix}_VAL_004"
+title = "validateProposal with expired proposal"
+invariant = "Expired proposal returns ExpiredProposal"
+
+[[spec_area]]
+name = "Proposal Count Statistics"
+
+[[spec]]
+id = "${prefix}_CNT_001"
+title = "countByStatus with Pending"
+invariant = "Returns count of proposals with Pending status"
+
+[[spec]]
+id = "${prefix}_CNT_002"
+title = "countByStatus with UnderReview"
+invariant = "Returns count of proposals with UnderReview status"
+
+[[spec]]
+id = "${prefix}_CNT_003"
+title = "countByStatus with Approved"
+invariant = "Returns count of proposals with Approved status"
+
+[[spec]]
+id = "${prefix}_CNT_004"
+title = "countByStatus with empty state"
+invariant = "Returns 0 for all statuses on empty state"

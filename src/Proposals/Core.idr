@@ -9,7 +9,7 @@
 module Proposals.Core
 
 import FRMonad.Core
-import OUC.Core
+import OUC.Functions.Core
 import Data.List
 
 %default total

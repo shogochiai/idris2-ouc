@@ -6,7 +6,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 BUILD_DIR="$PROJECT_DIR/build"
-IC0_SUPPORT="$PROJECT_DIR/support/ic0"
+IC0_SUPPORT="$PROJECT_DIR/lib/ic0"
 
 # Idris2 environment
 export PATH="$HOME/.local/bin:$HOME/.pack/bin:$PATH"
@@ -195,6 +195,7 @@ CPATH= CPLUS_INCLUDE_PATH= emcc "$C_FILE" \
     -s ERROR_ON_UNDEFINED_SYMBOLS=0 \
     --no-entry \
     -O2 \
+    -g2 \
     2>&1 || {
     echo "Emscripten compilation failed"
     exit 1
@@ -211,17 +212,18 @@ if [ ! -f "$STUB_WASI" ]; then
         wasm2wat "$BUILD_DIR/ouc.wasm" -o "$BUILD_DIR/ouc.wat"
 
         # Replace WASI imports with stub functions
+        # Note: Emscripten generates $__wasi_* function names (with __wasi_ prefix)
         sed -i.bak '
-            s/(import "wasi_snapshot_preview1" "fd_close" (func $fd_close (type [0-9]*)))/(func $fd_close (param i32) (result i32) i32.const 0)/
-            s/(import "wasi_snapshot_preview1" "fd_write" (func $fd_write (type [0-9]*)))/(func $fd_write (param i32 i32 i32 i32) (result i32) i32.const 0)/
-            s/(import "wasi_snapshot_preview1" "fd_seek" (func $fd_seek (type [0-9]*)))/(func $fd_seek (param i32 i64 i32 i32) (result i32) i32.const 0)/
-            s/(import "wasi_snapshot_preview1" "fd_read" (func $fd_read (type [0-9]*)))/(func $fd_read (param i32 i32 i32 i32) (result i32) i32.const 0)/
-            s/(import "wasi_snapshot_preview1" "environ_sizes_get" (func $environ_sizes_get (type [0-9]*)))/(func $environ_sizes_get (param i32 i32) (result i32) i32.const 0)/
-            s/(import "wasi_snapshot_preview1" "environ_get" (func $environ_get (type [0-9]*)))/(func $environ_get (param i32 i32) (result i32) i32.const 0)/
-            s/(import "wasi_snapshot_preview1" "proc_exit" (func $proc_exit (type [0-9]*)))/(func $proc_exit (param i32))/
+            s/(import "wasi_snapshot_preview1" "fd_close" (func \$__wasi_fd_close (type [0-9]*)))/(func $__wasi_fd_close (param i32) (result i32) i32.const 0)/
+            s/(import "wasi_snapshot_preview1" "fd_write" (func \$__wasi_fd_write (type [0-9]*)))/(func $__wasi_fd_write (param i32 i32 i32 i32) (result i32) i32.const 0)/
+            s/(import "wasi_snapshot_preview1" "fd_seek" (func \$__wasi_fd_seek (type [0-9]*)))/(func $__wasi_fd_seek (param i32 i64 i32 i32) (result i32) i32.const 0)/
+            s/(import "wasi_snapshot_preview1" "fd_read" (func \$__wasi_fd_read (type [0-9]*)))/(func $__wasi_fd_read (param i32 i32 i32 i32) (result i32) i32.const 0)/
+            s/(import "wasi_snapshot_preview1" "environ_sizes_get" (func \$__wasi_environ_sizes_get (type [0-9]*)))/(func $__wasi_environ_sizes_get (param i32 i32) (result i32) i32.const 0)/
+            s/(import "wasi_snapshot_preview1" "environ_get" (func \$__wasi_environ_get (type [0-9]*)))/(func $__wasi_environ_get (param i32 i32) (result i32) i32.const 0)/
+            s/(import "wasi_snapshot_preview1" "proc_exit" (func \$__wasi_proc_exit (type [0-9]*)))/(func $__wasi_proc_exit (param i32))/
         ' "$BUILD_DIR/ouc.wat"
 
-        wat2wasm "$BUILD_DIR/ouc.wat" -o "$BUILD_DIR/ouc_stubbed.wasm" || {
+        wat2wasm "$BUILD_DIR/ouc.wat" --debug-names -o "$BUILD_DIR/ouc_stubbed.wasm" || {
             echo "WASI stubbing failed, using original WASM"
             cp "$BUILD_DIR/ouc.wasm" "$BUILD_DIR/ouc_stubbed.wasm"
         }

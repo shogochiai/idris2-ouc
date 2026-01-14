@@ -1,0 +1,322 @@
+# FABI Module Specification
+# Failure-Aware Build Infrastructure for Self-Amending Protocols
+
+[definitions]
+prefix = "REQ_FABI"
+
+# =============================================================================
+# REPRODUCIBLE BUILD SPEC
+# =============================================================================
+
+[[spec_area]]
+name = "Build Environment Definition"
+
+[[spec]]
+id = "${prefix}_ENV_001"
+title = "Environment is fully declarative"
+invariant = "BuildEnv can be reconstructed from env.toml without human intervention"
+
+[[spec]]
+id = "${prefix}_ENV_002"
+title = "Toolchain versions pinned"
+invariant = "idris2, pack, emcc, wasm-opt versions locked in env.toml"
+
+[[spec]]
+id = "${prefix}_ENV_003"
+title = "System dependencies enumerated"
+invariant = "OS packages listed with exact versions (gmp, zlib, etc.)"
+
+[[spec]]
+id = "${prefix}_ENV_004"
+title = "Container hash deterministic"
+invariant = "Docker/Nix hash reproducible from env.toml alone"
+
+[[spec]]
+id = "${prefix}_ENV_005"
+title = "No network access during build"
+invariant = "Build stage is hermetic (--network=none or equivalent)"
+
+[[spec_area]]
+name = "Source + Lockfile + Env Hash Schema"
+
+[[spec]]
+id = "${prefix}_HASH_001"
+title = "Source hash covers all inputs"
+invariant = "sourceHash = hash(src/**/*.idr + src/**/*.c + pack.toml)"
+
+[[spec]]
+id = "${prefix}_HASH_002"
+title = "Lockfile hash pins dependencies"
+invariant = "lockHash = hash(pack.lock) covering all transitive deps"
+
+[[spec]]
+id = "${prefix}_HASH_003"
+title = "Env hash pins build environment"
+invariant = "envHash = hash(env.toml + Docker/Nix derivation)"
+
+[[spec]]
+id = "${prefix}_HASH_004"
+title = "Build input hash is composition"
+invariant = "inputHash = hash(sourceHash || lockHash || envHash)"
+
+[[spec]]
+id = "${prefix}_HASH_005"
+title = "Output hash covers artifacts"
+invariant = "outputHash = hash(*.wasm + *.did + metadata.json)"
+
+[[spec_area]]
+name = "Build Evidence Format"
+
+[[spec]]
+id = "${prefix}_EVID_001"
+title = "Evidence contains input/output hashes"
+invariant = "BuildEvidence.inputHash and outputHash are non-empty"
+
+[[spec]]
+id = "${prefix}_EVID_002"
+title = "Evidence is timestamped"
+invariant = "BuildEvidence.timestamp from trusted time source"
+
+[[spec]]
+id = "${prefix}_EVID_003"
+title = "Evidence is signed by builder"
+invariant = "BuildEvidence.signature verifiable with builder pubkey"
+
+[[spec]]
+id = "${prefix}_EVID_004"
+title = "Evidence chain links to previous"
+invariant = "BuildEvidence.previousHash = hash(prior evidence) or genesis"
+
+[[spec]]
+id = "${prefix}_EVID_005"
+title = "Evidence includes build logs hash"
+invariant = "BuildEvidence.logsHash allows log retrieval verification"
+
+# =============================================================================
+# N-OF-N BUILDER NETWORK
+# =============================================================================
+
+[[spec_area]]
+name = "Independent Builder Roles"
+
+[[spec]]
+id = "${prefix}_BUILDER_001"
+title = "Builders are independently operated"
+invariant = "No two builders share infrastructure or keys"
+
+[[spec]]
+id = "${prefix}_BUILDER_002"
+title = "Builder identity is verifiable"
+invariant = "Each builder has unique pubkey registered in BuilderRegistry"
+
+[[spec]]
+id = "${prefix}_BUILDER_003"
+title = "Builder stake required"
+invariant = "registerBuilder fails if stake < minBuilderStake"
+
+[[spec]]
+id = "${prefix}_BUILDER_004"
+title = "Builder diversity enforced"
+invariant = "Builders must use different base images (Alpine vs Debian vs Nix)"
+
+[[spec_area]]
+name = "Build Result Intersection Protocol"
+
+[[spec]]
+id = "${prefix}_INTER_001"
+title = "All builders must participate"
+invariant = "acceptBuild requires n-of-n matching outputHashes"
+
+[[spec]]
+id = "${prefix}_INTER_002"
+title = "Partial agreement rejected"
+invariant = "acceptBuild fails if any builder result missing"
+
+[[spec]]
+id = "${prefix}_INTER_003"
+title = "Hash mismatch triggers dispute"
+invariant = "disagreeing hashes => BuildDispute created"
+
+[[spec]]
+id = "${prefix}_INTER_004"
+title = "Intersection result is canonical"
+invariant = "Accepted outputHash becomes canonical build artifact"
+
+[[spec_area]]
+name = "Dispute and Mismatch Handling"
+
+[[spec]]
+id = "${prefix}_DISPUTE_001"
+title = "Dispute records all builder claims"
+invariant = "BuildDispute contains {builder: outputHash} for all builders"
+
+[[spec]]
+id = "${prefix}_DISPUTE_002"
+title = "Dispute halts upgrade pipeline"
+invariant = "No OUC proposal can reference disputed build"
+
+[[spec]]
+id = "${prefix}_DISPUTE_003"
+title = "Investigation period enforced"
+invariant = "Dispute resolution requires >= minInvestigationPeriod"
+
+[[spec]]
+id = "${prefix}_DISPUTE_004"
+title = "Malicious builder slashing"
+invariant = "Confirmed non-reproducible build => builder stake slashed"
+
+[[spec]]
+id = "${prefix}_DISPUTE_005"
+title = "Env contamination triggers rebuild"
+invariant = "f_env classification => all builders rebuild in fresh env"
+
+# =============================================================================
+# BUILD REBINDING PROCEDURES
+# =============================================================================
+
+[[spec_area]]
+name = "Builder Replacement Flow"
+
+[[spec]]
+id = "${prefix}_REPLACE_001"
+title = "Replacement requires governance approval"
+invariant = "replaceBuilder requires auditor quorum approval"
+
+[[spec]]
+id = "${prefix}_REPLACE_002"
+title = "New builder must prove capability"
+invariant = "New builder must reproduce last 3 successful builds"
+
+[[spec]]
+id = "${prefix}_REPLACE_003"
+title = "Old builder stake locked during transition"
+invariant = "Replaced builder stake released after transitionPeriod"
+
+[[spec]]
+id = "${prefix}_REPLACE_004"
+title = "Minimum builder count maintained"
+invariant = "replaceBuilder fails if result < minBuilderCount"
+
+[[spec_area]]
+name = "Environment Migration"
+
+[[spec]]
+id = "${prefix}_MIGRATE_001"
+title = "Migration is atomic"
+invariant = "envMigrate either fully succeeds or fully reverts"
+
+[[spec]]
+id = "${prefix}_MIGRATE_002"
+title = "Backward compatibility verified"
+invariant = "Old source must compile in new env before migration"
+
+[[spec]]
+id = "${prefix}_MIGRATE_003"
+title = "Migration evidence chain preserved"
+invariant = "envMigrate records link from old envHash to new envHash"
+
+[[spec]]
+id = "${prefix}_MIGRATE_004"
+title = "Rollback path defined"
+invariant = "envRollback can restore previous env within rollbackWindow"
+
+[[spec_area]]
+name = "Emergency Rebuild Path"
+
+[[spec]]
+id = "${prefix}_EMERG_001"
+title = "Emergency requires elevated threshold"
+invariant = "emergencyRebuild requires >= emergencyQuorum auditors"
+
+[[spec]]
+id = "${prefix}_EMERG_002"
+title = "Emergency skips builder quorum temporarily"
+invariant = "Single trusted builder can produce emergency build"
+
+[[spec]]
+id = "${prefix}_EMERG_003"
+title = "Emergency build marked provisional"
+invariant = "Emergency build status = Provisional until n-of-n confirmation"
+
+[[spec]]
+id = "${prefix}_EMERG_004"
+title = "Emergency timeout enforced"
+invariant = "Provisional build expires after emergencyTimeout without confirmation"
+
+# =============================================================================
+# INTEGRATION WITH OUC
+# =============================================================================
+
+[[spec_area]]
+name = "Build Evidence to OUC Proposal Schema"
+
+[[spec]]
+id = "${prefix}_OUC_001"
+title = "OUC proposal requires build evidence"
+invariant = "submitProposal fails without valid BuildEvidence attachment"
+
+[[spec]]
+id = "${prefix}_OUC_002"
+title = "Evidence hash embedded in proposal"
+invariant = "Proposal.buildEvidenceHash matches attached evidence"
+
+[[spec]]
+id = "${prefix}_OUC_003"
+title = "Auditors can verify build"
+invariant = "Auditor can retrieve full BuildEvidence from hash"
+
+[[spec]]
+id = "${prefix}_OUC_004"
+title = "Build source hash matches proposal"
+invariant = "Proposal.sourceHash must equal BuildEvidence.inputHash.sourceHash"
+
+[[spec_area]]
+name = "Auditor Build Verification"
+
+[[spec]]
+id = "${prefix}_AUDIT_001"
+title = "Auditor can request rebuild"
+invariant = "requestRebuild triggers builder network to reproduce"
+
+[[spec]]
+id = "${prefix}_AUDIT_002"
+title = "Verification result recorded"
+invariant = "verifyBuild appends AuditorVerification to proposal"
+
+[[spec]]
+id = "${prefix}_AUDIT_003"
+title = "Failed verification blocks approval"
+invariant = "Proposal cannot be Approved if any verification failed"
+
+[[spec]]
+id = "${prefix}_AUDIT_004"
+title = "Verification timeout enforced"
+invariant = "No response within verificationTimeout = verification failed"
+
+[[spec_area]]
+name = "Failure Sink Diagnostics"
+
+[[spec]]
+id = "${prefix}_DIAG_001"
+title = "f_env detectable"
+invariant = "diagnose returns f_env for environment contamination indicators"
+
+[[spec]]
+id = "${prefix}_DIAG_002"
+title = "f_repro detectable"
+invariant = "diagnose returns f_repro for non-reproducible builds"
+
+[[spec]]
+id = "${prefix}_DIAG_003"
+title = "f_key detectable"
+invariant = "diagnose returns f_key for signature verification failures"
+
+[[spec]]
+id = "${prefix}_DIAG_004"
+title = "f_ops detectable"
+invariant = "diagnose returns f_ops for builder liveness failures"
+
+[[spec]]
+id = "${prefix}_DIAG_005"
+title = "Rebinding path suggested"
+invariant = "diagnose result includes recommended RebindingAction"

@@ -1,0 +1,11 @@
+package ffirepro
+version = 0.1.0
+authors = "OUC Team"
+brief   = "Minimal reproduction case for FFI Bug #3"
+
+sourcedir = "."
+
+modules = FFITest
+
+main = FFITest
+executable = ffi-test

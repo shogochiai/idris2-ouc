@@ -7,6 +7,7 @@ module HttpOutcall.TxSender
 import public HttpOutcall.TxSender.Types
 import public HttpOutcall.TxSender.Abi
 import public HttpOutcall.TxSender.Send
+import public HttpOutcall.TxSender.AuditorOps
 
 %default total
 

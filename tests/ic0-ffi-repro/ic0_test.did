@@ -1,0 +1,13 @@
+// IC0 FFI Bug #3 Test Canister Interface
+service : {
+  // Run FFI test and return the time value captured via Idris2 FFI
+  // If Bug #3 is present, this returns 0
+  // If working correctly, this returns non-zero nanoseconds
+  test_ffi : () -> (nat) query;
+
+  // Direct C call to ic0_time_impl (bypasses Idris2 and C wrapper)
+  test_direct : () -> (nat) query;
+
+  // C wrapper call to ic0_time (bypasses only Idris2)
+  test_c_wrapper : () -> (nat) query;
+}

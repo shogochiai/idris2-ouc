@@ -8,9 +8,9 @@
 module ERC7546.Upgrade
 
 import FRMonad.Core
-import OUC.Core
-import OUC.MultiSig
-import OUC.Signatures
+import OUC.Functions.Core
+import OUC.Functions.MultiSig
+import OUC.Functions.Signatures
 import HttpOutcall.Core
 import HttpOutcall.EvmRpc
 import HttpOutcall.TxSender

@@ -1,0 +1,331 @@
+# Governance-by-Observation Module Specification
+# Self-Amending Protocol observability and automatic selection pressure
+
+[definitions]
+prefix = "REQ_GOV"
+
+# =============================================================================
+# USAGE SIGNAL COLLECTION (使用シグナル収集)
+# =============================================================================
+
+[[spec_area]]
+name = "Usage Signal Collection"
+
+[[spec]]
+id = "${prefix}_USAGE_001"
+title = "Transaction count tracked"
+invariant = "UsageSignal.txCount increments on each successful transaction"
+
+[[spec]]
+id = "${prefix}_USAGE_002"
+title = "Unique caller count tracked"
+invariant = "UsageSignal.uniqueCallers = count(distinct msg.caller)"
+
+[[spec]]
+id = "${prefix}_USAGE_003"
+title = "Value flow tracked"
+invariant = "UsageSignal.totalValueLocked reflects current TVL"
+
+[[spec]]
+id = "${prefix}_USAGE_004"
+title = "Time-windowed metrics"
+invariant = "UsageSignal supports 24h, 7d, 30d aggregation windows"
+
+[[spec]]
+id = "${prefix}_USAGE_005"
+title = "Activity recency tracked"
+invariant = "UsageSignal.lastActiveAt updated on each interaction"
+
+[[spec]]
+id = "${prefix}_USAGE_006"
+title = "Zero-usage detection"
+invariant = "isInactive returns true if no transactions in dormancyPeriod"
+
+[[spec_area]]
+name = "Protocol Adoption Metrics"
+
+[[spec]]
+id = "${prefix}_ADOPT_001"
+title = "Integration count tracked"
+invariant = "AdoptionMetrics.integratorCount = count(contracts calling protocol)"
+
+[[spec]]
+id = "${prefix}_ADOPT_002"
+title = "Dependency depth calculated"
+invariant = "AdoptionMetrics.dependencyDepth = max downstream hops"
+
+[[spec]]
+id = "${prefix}_ADOPT_003"
+title = "Cross-chain presence tracked"
+invariant = "AdoptionMetrics.chainCount = count(chains with deployments)"
+
+# =============================================================================
+# FAILURE RECORDING (失敗記録 - FR Semantics)
+# =============================================================================
+
+[[spec_area]]
+name = "Failure Event Recording"
+
+[[spec]]
+id = "${prefix}_FAIL_001"
+title = "Revert reasons captured"
+invariant = "FailureRecord includes EVM revert reason when available"
+
+[[spec]]
+id = "${prefix}_FAIL_002"
+title = "Failure timestamp recorded"
+invariant = "FailureRecord.timestamp = block.timestamp at failure"
+
+[[spec]]
+id = "${prefix}_FAIL_003"
+title = "Failure caller recorded"
+invariant = "FailureRecord.caller = msg.sender at failure"
+
+[[spec]]
+id = "${prefix}_FAIL_004"
+title = "Failure input recorded"
+invariant = "FailureRecord.calldata = input that caused failure"
+
+[[spec]]
+id = "${prefix}_FAIL_005"
+title = "Failure classification applied"
+invariant = "FailureRecord.failureType from FR taxonomy (f_env/f_key/f_repro/f_ops/f_code)"
+
+[[spec_area]]
+name = "FR Semantics Integration"
+
+[[spec]]
+id = "${prefix}_FR_001"
+title = "f_code failures tracked"
+invariant = "Code logic errors classified as f_code"
+
+[[spec]]
+id = "${prefix}_FR_002"
+title = "f_audit failures tracked"
+invariant = "Audit-related failures classified as f_audit"
+
+[[spec]]
+id = "${prefix}_FR_003"
+title = "f_liveness failures tracked"
+invariant = "Liveness failures (no response) classified as f_liveness"
+
+[[spec]]
+id = "${prefix}_FR_004"
+title = "Failure rate calculated"
+invariant = "failureRate = failureCount / (failureCount + successCount)"
+
+[[spec]]
+id = "${prefix}_FR_005"
+title = "Failure trend detected"
+invariant = "isFailureTrendingUp = current window rate > previous window rate"
+
+[[spec_area]]
+name = "Failure Severity Assessment"
+
+[[spec]]
+id = "${prefix}_SEV_001"
+title = "Critical failures identified"
+invariant = "Severity.Critical for fund loss or security breach"
+
+[[spec]]
+id = "${prefix}_SEV_002"
+title = "High severity for repeated failures"
+invariant = "Severity.High if same failure > highFailureThreshold times"
+
+[[spec]]
+id = "${prefix}_SEV_003"
+title = "Medium severity for isolated failures"
+invariant = "Severity.Medium for one-time unexpected reverts"
+
+[[spec]]
+id = "${prefix}_SEV_004"
+title = "Low severity for expected failures"
+invariant = "Severity.Low for user-error induced reverts"
+
+# =============================================================================
+# AUTOMATIC CULLING (自動淘汰メカニズム)
+# =============================================================================
+
+[[spec_area]]
+name = "Health State Machine"
+
+[[spec]]
+id = "${prefix}_HEALTH_001"
+title = "Health states are exhaustive"
+invariant = "ProtocolHealth ∈ {Healthy, Wounded, Drifting, Frozen, Dead}"
+
+[[spec]]
+id = "${prefix}_HEALTH_002"
+title = "Healthy requires active usage + low failure rate"
+invariant = "Healthy iff isActive && failureRate < healthyThreshold"
+
+[[spec]]
+id = "${prefix}_HEALTH_003"
+title = "Wounded indicates elevated failures"
+invariant = "Wounded iff failureRate >= healthyThreshold && failureRate < criticalThreshold"
+
+[[spec]]
+id = "${prefix}_HEALTH_004"
+title = "Drifting indicates low usage"
+invariant = "Drifting iff isInactive && failureRate < criticalThreshold"
+
+[[spec]]
+id = "${prefix}_HEALTH_005"
+title = "Frozen indicates manual intervention"
+invariant = "Frozen iff governanceAction == Freeze"
+
+[[spec]]
+id = "${prefix}_HEALTH_006"
+title = "Dead indicates permanent retirement"
+invariant = "Dead iff retired || (Frozen duration > retirementThreshold)"
+
+[[spec_area]]
+name = "Automatic Quarantine"
+
+[[spec]]
+id = "${prefix}_QUAR_001"
+title = "Critical failure triggers quarantine"
+invariant = "Severity.Critical => QuarantineAction.Freeze"
+
+[[spec]]
+id = "${prefix}_QUAR_002"
+title = "Repeated high failures trigger quarantine"
+invariant = "highFailureCount > quarantineThreshold => QuarantineAction.Freeze"
+
+[[spec]]
+id = "${prefix}_QUAR_003"
+title = "Quarantine is reversible"
+invariant = "Frozen protocol can be unfrozen by governance"
+
+[[spec]]
+id = "${prefix}_QUAR_004"
+title = "Quarantine logged"
+invariant = "QuarantineEvent recorded with reason, timestamp, initiator"
+
+[[spec_area]]
+name = "Retirement Flow"
+
+[[spec]]
+id = "${prefix}_RETIRE_001"
+title = "Prolonged freeze triggers retirement consideration"
+invariant = "Frozen > retirementConsiderationPeriod => RetirementProposal created"
+
+[[spec]]
+id = "${prefix}_RETIRE_002"
+title = "Zero adoption accelerates retirement"
+invariant = "AdoptionMetrics.integratorCount == 0 reduces retirementThreshold"
+
+[[spec]]
+id = "${prefix}_RETIRE_003"
+title = "Retirement requires governance vote"
+invariant = "retire requires quorum approval (non-automatic)"
+
+[[spec]]
+id = "${prefix}_RETIRE_004"
+title = "Retired protocols are immutable"
+invariant = "Dead state is terminal; no state transitions out"
+
+[[spec]]
+id = "${prefix}_RETIRE_005"
+title = "Retirement preserves audit trail"
+invariant = "All FailureRecords and UsageSignals archived before retirement"
+
+# =============================================================================
+# SELECTION PRESSURE (進化的淘汰圧)
+# =============================================================================
+
+[[spec_area]]
+name = "Fitness Score"
+
+[[spec]]
+id = "${prefix}_FIT_001"
+title = "Fitness calculated from signals"
+invariant = "fitness = f(usage, adoption, reliability)"
+
+[[spec]]
+id = "${prefix}_FIT_002"
+title = "Usage contributes positively"
+invariant = "Higher txCount => higher fitness (diminishing returns)"
+
+[[spec]]
+id = "${prefix}_FIT_003"
+title = "Failures contribute negatively"
+invariant = "Higher failureRate => lower fitness (exponential penalty)"
+
+[[spec]]
+id = "${prefix}_FIT_004"
+title = "Adoption provides stability"
+invariant = "Higher integratorCount => slower fitness decay"
+
+[[spec]]
+id = "${prefix}_FIT_005"
+title = "Fitness history tracked"
+invariant = "FitnessHistory records fitness at regular intervals"
+
+[[spec_area]]
+name = "Comparative Ranking"
+
+[[spec]]
+id = "${prefix}_RANK_001"
+title = "Protocols ranked by fitness"
+invariant = "getProtocolRanking returns sorted list by fitness descending"
+
+[[spec]]
+id = "${prefix}_RANK_002"
+title = "Bottom percentile flagged"
+invariant = "isBottomPercentile true for fitness < percentileThreshold"
+
+[[spec]]
+id = "${prefix}_RANK_003"
+title = "Ranking updates on signal change"
+invariant = "updateRanking recalculates on new UsageSignal or FailureRecord"
+
+# =============================================================================
+# OBSERVATION INFRASTRUCTURE
+# =============================================================================
+
+[[spec_area]]
+name = "Observer Registration"
+
+[[spec]]
+id = "${prefix}_OBS_001"
+title = "Observers can register"
+invariant = "registerObserver adds observer to notification list"
+
+[[spec]]
+id = "${prefix}_OBS_002"
+title = "Observers notified on state change"
+invariant = "Health state change => notifyObservers called"
+
+[[spec]]
+id = "${prefix}_OBS_003"
+title = "Observers notified on quarantine"
+invariant = "QuarantineAction => notifyObservers with QuarantineEvent"
+
+[[spec]]
+id = "${prefix}_OBS_004"
+title = "Observer can unregister"
+invariant = "unregisterObserver removes observer from list"
+
+[[spec_area]]
+name = "Alerting"
+
+[[spec]]
+id = "${prefix}_ALERT_001"
+title = "Critical alerts immediate"
+invariant = "Severity.Critical => Alert within alertLatency"
+
+[[spec]]
+id = "${prefix}_ALERT_002"
+title = "Alerts contain context"
+invariant = "Alert includes protocolId, healthState, failureDetails"
+
+[[spec]]
+id = "${prefix}_ALERT_003"
+title = "Alert escalation path"
+invariant = "Unacknowledged alerts escalate after escalationPeriod"
+
+[[spec]]
+id = "${prefix}_ALERT_004"
+title = "Alert deduplication"
+invariant = "Same alert not repeated within deduplicationWindow"

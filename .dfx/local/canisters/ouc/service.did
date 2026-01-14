@@ -1,0 +1,38 @@
+// OptimisticUpgraderCanister (OUC) - Minimal Candid Interface
+// This is a simplified interface for MVP deployment.
+// Full FRC-compliant types will be added when Idris->Candid encoding is implemented.
+
+service : {
+    // Query Methods
+    getProposal: (nat) -> (text) query;
+    getProposalsByChain: (nat) -> (text) query;
+    getProposalsByStatus: (text) -> (text) query;
+    getAuditor: (principal) -> (text) query;
+    getActiveAuditors: () -> (text) query;
+    getReviewsForProposal: (nat) -> (text) query;
+    getPendingReward: (principal) -> (nat) query;
+    getTotalDistributed: (principal) -> (nat) query;
+    getTreasuryBalance: () -> (nat) query;
+    getOwner: () -> (text) query;
+    getVersion: () -> (nat) query;
+    getProposalCount: () -> (nat) query;
+    getAuditorCount: () -> (nat) query;
+
+    // Update Methods
+    // MVP: registerAuditor/suspendAuditor/reactivateAuditor ignore arguments
+    // Full Candid arg parsing will be added in Phase 3
+    submitProposal: (text) -> (text);
+    cancelProposal: (nat) -> (text);
+    registerAuditor: () -> (text);
+    suspendAuditor: () -> (text);
+    reactivateAuditor: () -> (text);
+    assignAuditor: (nat, principal) -> (text);
+    submitReview: (nat, text) -> (text);
+    prepareExecution: (nat) -> (text);
+    recordExecution: (nat, text) -> (text);
+    distributeReward: (principal, nat) -> (text);
+    transferOwnership: (principal) -> (text);
+
+    // HTTP Outcall Test
+    testEthBlockNumber: () -> (text);
+}

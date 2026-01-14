@@ -8,7 +8,7 @@
 module AuditorPool.AutoAssign
 
 import FRMonad.Core
-import OUC.Core
+import OUC.Functions.Core
 import AuditorPool.Core
 import Data.List
 import Data.Nat

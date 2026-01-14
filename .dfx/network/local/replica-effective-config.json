@@ -1,0 +1,32 @@
+{
+  "replica_rev": "724ae4101bfdd8d4443126a6a8b1ec5ca9b68a12",
+  "effective_canister_id": "uqqxf-5h777-77774-qaaaa-cai",
+  "type": "pocket_ic",
+  "config": {
+    "http_handler": {
+      "port": null,
+      "write_port_to": null
+    },
+    "state_manager": {
+      "state_root": "/Users/bob/code/idris2-ouc/.dfx/network/local/state/replicated_state"
+    },
+    "crypto": {
+      "crypto_root": "/Users/bob/code/idris2-ouc/.dfx/network/local/state/crypto_store"
+    },
+    "artifact_pool": {
+      "consensus_pool_path": "/Users/bob/code/idris2-ouc/.dfx/network/local/state/consensus_pool"
+    },
+    "subnet_type": "system",
+    "btc_adapter": {
+      "enabled": false,
+      "socket_path": null
+    },
+    "canister_http_adapter": {
+      "enabled": true,
+      "socket_path": null
+    },
+    "log_level": "error",
+    "artificial_delay": 600,
+    "system_canisters": false
+  }
+}

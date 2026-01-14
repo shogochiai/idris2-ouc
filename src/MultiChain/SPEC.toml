@@ -1,0 +1,147 @@
+# MultiChain Module Specification
+# Cross-chain upgrade orchestration for OUC
+
+[definitions]
+prefix = "REQ_MC"
+
+# =============================================================================
+# Chain Registry
+# =============================================================================
+
+[[spec_area]]
+name = "Chain Registry"
+
+[[spec]]
+id = "${prefix}_REG_001"
+title = "ChainId identifies EVM chains by EIP-155 ID"
+invariant = "ChainId wraps Nat with known constants (1, 42161, 8453, etc.)"
+
+[[spec]]
+id = "${prefix}_REG_002"
+title = "ChainConfig contains full chain metadata"
+invariant = "chainId, name, rpcUrl, confirmations, gasMultiplier, isActive"
+
+[[spec]]
+id = "${prefix}_REG_003"
+title = "ChainRegistry maintains list of registered chains"
+invariant = "chains list + defaultChain + lastUpdated timestamp"
+
+[[spec]]
+id = "${prefix}_REG_004"
+title = "addChain rejects duplicate chain IDs"
+invariant = "Returns Left if chainId already exists in registry"
+
+[[spec]]
+id = "${prefix}_REG_005"
+title = "getChain returns config for valid chain ID"
+invariant = "Returns Just ChainConfig if found, Nothing otherwise"
+
+[[spec]]
+id = "${prefix}_REG_006"
+title = "getActiveChains filters inactive chains"
+invariant = "Only returns configs where isActive == True"
+
+[[spec]]
+id = "${prefix}_REG_007"
+title = "removeChain fails for non-existent chain"
+invariant = "Returns Left if chainId not in registry"
+
+[[spec]]
+id = "${prefix}_REG_008"
+title = "setDefaultChain requires registered chain"
+invariant = "Returns Left if chainId not in registry"
+
+# =============================================================================
+# Chain Status
+# =============================================================================
+
+[[spec_area]]
+name = "Chain Status"
+
+[[spec]]
+id = "${prefix}_STS_001"
+title = "ChainStatus represents operational state"
+invariant = "Healthy | Degraded String | Unhealthy String | Offline"
+
+[[spec]]
+id = "${prefix}_STS_002"
+title = "activateChain sets isActive to True"
+invariant = "Updates chain config in registry"
+
+[[spec]]
+id = "${prefix}_STS_003"
+title = "deactivateChain sets isActive to False"
+invariant = "Updates chain config in registry"
+
+# =============================================================================
+# RPC Management
+# =============================================================================
+
+[[spec_area]]
+name = "RPC Management"
+
+[[spec]]
+id = "${prefix}_RPC_001"
+title = "ChainConfig includes backup RPC endpoints"
+invariant = "rpcBackups list for failover"
+
+# =============================================================================
+# Gas Configuration
+# =============================================================================
+
+[[spec_area]]
+name = "Gas Configuration"
+
+[[spec]]
+id = "${prefix}_GAS_001"
+title = "gasMultiplier in basis points"
+invariant = "12000 = 120% gas estimate"
+
+[[spec]]
+id = "${prefix}_GAS_002"
+title = "Ethereum has highest confirmation requirement"
+invariant = "12 confirmations for mainnet"
+
+[[spec]]
+id = "${prefix}_GAS_003"
+title = "L2s have lower confirmation requirements"
+invariant = "1 confirmation for Arbitrum, Base"
+
+# =============================================================================
+# Well-Known Chains
+# =============================================================================
+
+[[spec_area]]
+name = "Well-Known Chains"
+
+[[spec]]
+id = "${prefix}_WKC_001"
+title = "ethereumMainnet has chainId 1"
+invariant = "MkChainId 1"
+
+[[spec]]
+id = "${prefix}_WKC_002"
+title = "arbitrumOne has chainId 42161"
+invariant = "MkChainId 42161"
+
+[[spec]]
+id = "${prefix}_WKC_003"
+title = "baseMainnet has chainId 8453"
+invariant = "MkChainId 8453"
+
+[[spec]]
+id = "${prefix}_WKC_004"
+title = "Default registry includes Ethereum, Arbitrum, Base"
+invariant = "initDefaultRegistry creates 3-chain registry"
+
+# =============================================================================
+# OU Registry
+# =============================================================================
+
+[[spec_area]]
+name = "OU Registry"
+
+[[spec]]
+id = "${prefix}_OUR_001"
+title = "RegisteredOU tracks OU on specific chain"
+invariant = "ouId, chainId, ouAddress, dictionaryAddr, registeredAt, isActive"

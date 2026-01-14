@@ -6,7 +6,7 @@ module HttpOutcall.TxSender.Send
 import FRMonad.Core
 import HttpOutcall.TxSender.Types
 import HttpOutcall.TxSender.Abi
-import OUC.Signatures
+import OUC.Functions.Signatures
 import Util.StringHex
 import Data.List
 
