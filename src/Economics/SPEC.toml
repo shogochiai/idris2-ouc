@@ -1,0 +1,394 @@
+# Economics Module Specification
+# A-Life Economics: Self-sustaining protocol operation via tiered service model
+
+[definitions]
+prefix = "ECON"
+
+# =============================================================================
+# TIER SYSTEM (Tier.idr)
+# =============================================================================
+
+[[spec_area]]
+name = "Tier Ordering and Equality"
+
+[[spec]]
+id = "${prefix}_TIER_001"
+title = "Tier ordering is correct"
+invariant = "Archive < Economy < Standard < RealTime"
+
+[[spec]]
+id = "${prefix}_TIER_002"
+title = "Tier Eq instances work"
+invariant = "Same tiers equal, different tiers not equal"
+
+[[spec]]
+id = "${prefix}_TIER_003"
+title = "Tier Show instances work"
+invariant = "show Archive == 'Archive', etc."
+
+[[spec]]
+id = "${prefix}_TIER_004"
+title = "Tier serialization roundtrip"
+invariant = "deserializeTier (serializeTier t) == Just t"
+
+[[spec]]
+id = "${prefix}_TIER_005"
+title = "Tier costs are ordered"
+invariant = "tierMonthlyCost Archive < Economy < Standard < RealTime"
+
+[[spec]]
+id = "${prefix}_TIER_006"
+title = "Sync intervals are ordered correctly"
+invariant = "Higher tier = smaller interval (more frequent sync)"
+
+[[spec]]
+id = "${prefix}_TIER_007"
+title = "Syncs per day are ordered correctly"
+invariant = "Higher tier = more syncs per day"
+
+[[spec]]
+id = "${prefix}_TIER_008"
+title = "allTiers contains all tiers"
+invariant = "length allTiers == 4"
+
+# =============================================================================
+# PROTOCOL ACCOUNT (ProtocolAccount.idr)
+# =============================================================================
+
+[[spec_area]]
+name = "Account Creation and Fields"
+
+[[spec]]
+id = "${prefix}_ACCT_001"
+title = "New account starts at Archive tier"
+invariant = "createAccount returns account with currentTier == Archive"
+
+[[spec]]
+id = "${prefix}_ACCT_002"
+title = "Account fields are set correctly"
+invariant = "protocolId, chainId, createdAt, lastSyncBlock set correctly"
+
+[[spec]]
+id = "${prefix}_ACCT_003"
+title = "Account Eq instance"
+invariant = "Accounts equal iff protocolId equal"
+
+[[spec_area]]
+name = "Account Registry"
+
+[[spec]]
+id = "${prefix}_ACCT_004"
+title = "Registry is initially empty"
+invariant = "emptyRegistry has 0 accounts and 0 totalCycles"
+
+[[spec]]
+id = "${prefix}_ACCT_005"
+title = "Registry upsert adds accounts"
+invariant = "upsertAccount increases account count"
+
+[[spec]]
+id = "${prefix}_ACCT_006"
+title = "Registry find works"
+invariant = "findAccount returns Just for existing, Nothing for non-existing"
+
+[[spec]]
+id = "${prefix}_ACCT_007"
+title = "Tier distribution calculation"
+invariant = "getTierDistribution correctly counts by tier"
+
+[[spec]]
+id = "${prefix}_ACCT_008"
+title = "Record sync updates state"
+invariant = "recordSync updates lastSyncBlock and lastSyncAt"
+
+[[spec]]
+id = "${prefix}_ACCT_009"
+title = "DonationResult fields exist"
+invariant = "donate returns result with previousTier"
+
+[[spec]]
+id = "${prefix}_ACCT_010"
+title = "DeductionResult fields exist"
+invariant = "dailyDeduction returns result with previousTier and newTier"
+
+# =============================================================================
+# SCHEDULER (Scheduler.idr)
+# =============================================================================
+
+[[spec_area]]
+name = "Scheduler State and Time"
+
+[[spec]]
+id = "${prefix}_SCHED_001"
+title = "Initial scheduler state"
+invariant = "initialSchedulerState has lastProcessedDay == 0"
+
+[[spec]]
+id = "${prefix}_SCHED_002"
+title = "Timestamp to day conversion"
+invariant = "timestampToDay converts seconds to day number"
+
+[[spec]]
+id = "${prefix}_SCHED_003"
+title = "isNewDay detection"
+invariant = "isNewDay true when currentDay > lastProcessedDay"
+
+[[spec_area]]
+name = "Heartbeat Processing"
+
+[[spec]]
+id = "${prefix}_SCHED_004"
+title = "Heartbeat with no day change"
+invariant = "processHeartbeat returns dailyProcessed == False on same day"
+
+[[spec]]
+id = "${prefix}_SCHED_005"
+title = "Heartbeat with day change"
+invariant = "processHeartbeat returns dailyProcessed == True on new day"
+
+[[spec]]
+id = "${prefix}_SCHED_006"
+title = "Batch sync grouping by chain"
+invariant = "groupByChain groups accounts by chainId"
+
+[[spec]]
+id = "${prefix}_SCHED_007"
+title = "Scheduler stats"
+invariant = "getSchedulerStats returns correct totalAccounts and currentDay"
+
+# =============================================================================
+# STATUS STATE MACHINE (Status.idr)
+# =============================================================================
+
+[[spec_area]]
+name = "Account Status Transitions"
+
+[[spec]]
+id = "${prefix}_STATUS_001"
+title = "Initial status is Active"
+invariant = "initialStatusContext has status == Active"
+
+[[spec]]
+id = "${prefix}_STATUS_002"
+title = "canOperate check with sufficient cycles"
+invariant = "canOperate true when availableCycles >= minCyclesRequired"
+
+[[spec]]
+id = "${prefix}_STATUS_003"
+title = "canOperate check with insufficient cycles"
+invariant = "canOperate false when availableCycles < minCyclesRequired"
+
+[[spec]]
+id = "${prefix}_STATUS_004"
+title = "Cycles depletion triggers suspension"
+invariant = "checkCyclesAndSuspend returns StatusSuspended when cycles == 0"
+
+[[spec]]
+id = "${prefix}_STATUS_005"
+title = "Start recovery from Suspended"
+invariant = "startRecovery from Suspended returns Just with status == Recovering"
+
+[[spec]]
+id = "${prefix}_STATUS_006"
+title = "Cannot start recovery from Active"
+invariant = "startRecovery from Active returns Nothing"
+
+[[spec]]
+id = "${prefix}_STATUS_007"
+title = "Recovery progress tracking"
+invariant = "updateProgress updates syncedBlocks and progress percentage"
+
+[[spec]]
+id = "${prefix}_STATUS_008"
+title = "Recovery completion"
+invariant = "isRecoveryComplete true when syncedBlocks >= targetBlocks"
+
+[[spec]]
+id = "${prefix}_STATUS_009"
+title = "Status serialization roundtrip"
+invariant = "deserializeStatus (serializeStatus s) == Just s"
+
+[[spec]]
+id = "${prefix}_STATUS_010"
+title = "Top-up trigger check"
+invariant = "shouldTriggerTopUp true when cycles < lowWatermark"
+
+# =============================================================================
+# CATCH-UP SYNC (CatchUpSync.idr)
+# =============================================================================
+
+[[spec_area]]
+name = "Catch-up Cost Calculation"
+
+[[spec]]
+id = "${prefix}_CATCHUP_001"
+title = "Blocks to sync calculation"
+invariant = "calcBlocksToSync(1 month) == 216000 blocks"
+
+[[spec]]
+id = "${prefix}_CATCHUP_002"
+title = "Calls needed calculation"
+invariant = "calcCallsNeeded(blocks) = ceil(blocks / 1000)"
+
+[[spec]]
+id = "${prefix}_CATCHUP_003"
+title = "Cost calculation for 1 month"
+invariant = "calcCatchUpCost(1) == 108B cycles"
+
+[[spec]]
+id = "${prefix}_CATCHUP_004"
+title = "Cost calculation for 6 months"
+invariant = "calcCatchUpCost(6) > 0 (computes)"
+
+[[spec_area]]
+name = "Catch-up Request Lifecycle"
+
+[[spec]]
+id = "${prefix}_CATCHUP_005"
+title = "Create catch-up request"
+invariant = "createCatchUpRequest sets status == CatchUpPending"
+
+[[spec]]
+id = "${prefix}_CATCHUP_006"
+title = "Start catch-up transitions to InProgress"
+invariant = "startCatchUp sets status == CatchUpInProgress"
+
+[[spec]]
+id = "${prefix}_CATCHUP_007"
+title = "Process batch updates progress"
+invariant = "processBatch increments currentBlock and batchesCompleted"
+
+[[spec]]
+id = "${prefix}_CATCHUP_008"
+title = "Catch-up completes when all blocks synced"
+invariant = "processBatch sets status == CatchUpCompleted when done"
+
+[[spec]]
+id = "${prefix}_CATCHUP_009"
+title = "Sync progress percentage"
+invariant = "syncProgress returns (done / total) * 100"
+
+[[spec]]
+id = "${prefix}_CATCHUP_010"
+title = "Blocks remaining calculation"
+invariant = "blocksRemaining returns toBlock - currentBlock"
+
+# =============================================================================
+# RECOVERY ORCHESTRATOR (RecoveryOrchestrator.idr)
+# =============================================================================
+
+[[spec_area]]
+name = "Recovery Initiation"
+
+[[spec]]
+id = "${prefix}_RECOVERY_001"
+title = "Initial recovery context"
+invariant = "initialRecoveryContext has status == Active and no catchUpReq"
+
+[[spec]]
+id = "${prefix}_RECOVERY_002"
+title = "Initiate recovery from Suspended"
+invariant = "initiateRecovery from Suspended with sufficient donation returns RecoveryStarted"
+
+[[spec]]
+id = "${prefix}_RECOVERY_003"
+title = "Initiate from Active (not needed)"
+invariant = "initiateRecovery from Active returns RecoveryNotNeeded"
+
+[[spec]]
+id = "${prefix}_RECOVERY_004"
+title = "Insufficient donation rejected"
+invariant = "initiateRecovery with donation < cost returns RecoveryNotAllowed"
+
+[[spec_area]]
+name = "Recovery Processing"
+
+[[spec]]
+id = "${prefix}_RECOVERY_005"
+title = "Recovery batch progress"
+invariant = "processRecoveryBatch returns RecoveryInProgress with correct percentage"
+
+[[spec]]
+id = "${prefix}_RECOVERY_006"
+title = "Recovery batch completion"
+invariant = "processRecoveryBatch returns RecoveryCompleted when all blocks synced"
+
+[[spec]]
+id = "${prefix}_RECOVERY_007"
+title = "Abort recovery"
+invariant = "abortRecovery returns to Suspended status"
+
+[[spec]]
+id = "${prefix}_RECOVERY_008"
+title = "isRecovering check"
+invariant = "isRecovering true iff status == Recovering"
+
+[[spec]]
+id = "${prefix}_RECOVERY_009"
+title = "getRecoveryProgress"
+invariant = "getRecoveryProgress returns percentage from catchUpReq"
+
+[[spec]]
+id = "${prefix}_RECOVERY_010"
+title = "getBlocksRemaining"
+invariant = "getBlocksRemaining returns remaining blocks from catchUpReq"
+
+# =============================================================================
+# BATCH OPTIMIZER (BatchOptimizer.idr)
+# =============================================================================
+
+[[spec_area]]
+name = "Priority Scoring"
+
+[[spec]]
+id = "${prefix}_BATCH_001"
+title = "Priority RealTime > Standard"
+invariant = "calcPriorityScore for RealTime > Standard tier"
+
+[[spec]]
+id = "${prefix}_BATCH_002"
+title = "Priority Archive lowest"
+invariant = "calcPriorityScore for Archive < all other tiers"
+
+[[spec]]
+id = "${prefix}_BATCH_003"
+title = "Sort by priority descending"
+invariant = "sortByPriority returns highest score first"
+
+[[spec_area]]
+name = "Batch Planning"
+
+[[spec]]
+id = "${prefix}_BATCH_004"
+title = "Batch cost estimation"
+invariant = "estimateBatchCost returns baseCost + perProtocolOverhead"
+
+[[spec]]
+id = "${prefix}_BATCH_005"
+title = "Stagger slot calculation"
+invariant = "calcSyncSlot returns slot < window.slots"
+
+[[spec]]
+id = "${prefix}_BATCH_006"
+title = "Schedule empty registry"
+invariant = "createOptimizedSchedule on empty returns no pending syncs"
+
+[[spec]]
+id = "${prefix}_BATCH_007"
+title = "Schedule respects cycles budget"
+invariant = "createOptimizedSchedule.totalCyclesCost <= budget"
+
+[[spec]]
+id = "${prefix}_BATCH_008"
+title = "Get next batch"
+invariant = "getNextBatch returns first batch or Nothing"
+
+[[spec]]
+id = "${prefix}_BATCH_009"
+title = "Completion time estimation"
+invariant = "estimateCompletionTime = numBatches * 2 seconds"
+
+[[spec]]
+id = "${prefix}_BATCH_010"
+title = "Get all scheduled protocols"
+invariant = "getAllScheduledProtocols returns flat list of all addresses"

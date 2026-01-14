@@ -9,29 +9,67 @@ sourcedir = "src"
 
 modules = Util.StringHex
         , Util.StringCase
-        -- OUC Domain Layer
-        , OUC.Core
-        , OUC.Signatures
-        , OUC.MultiSig
-        , OUC.Relay
-        , OUC.Lifecycle
-        , OUC.Obligations
+        -- Candid Encoding
+        , Candid.Hash
+        , Candid.Leb128
+        , Candid.Encoder
+        , Candid.Chain
+        , Candid.EvmRpc
+        , Candid.Icrc1
+        , Candid.FFI
+        , Candid.Tests.AllTests
+        -- OUC Domain Layer (Functions)
+        , OUC.Functions.Core
+        , OUC.Functions.Signatures
+        , OUC.Functions.MultiSig
+        , OUC.Functions.Relay
+        , OUC.Functions.Lifecycle
+        , OUC.Functions.Obligations
+        , OUC.Functions.Feedback
         , AuditorPool.Core
         , AuditorPool.AutoAssign
+        , AuditorPool.Vote
+        , AuditorPool.Tests.VoteTests
         , Rewards.Core
         , Proposals.Core
         -- EVM Communication Layer
         , HttpOutcall.Core
         , HttpOutcall.EvmRpc
+        , HttpOutcall.CatchUpSync
         , HttpOutcall.TxSender.Types
         , HttpOutcall.TxSender.Abi
+        , HttpOutcall.TxSender.Rlp
+        , HttpOutcall.TxSender.Signing
         , HttpOutcall.TxSender.Send
+        , HttpOutcall.TxSender.AuditorOps
         , HttpOutcall.TxSender
         , ERC7546.Dictionary
         , ERC7546.Upgrade
+        -- Threshold ECDSA
+        , ThresholdECDSA.Core
+        , ThresholdECDSA.FFI
+        -- Multi-Chain
+        , MultiChain.Registry
+        , MultiChain.OURegistry
+        -- Economics (A-Life)
+        , Economics.Types
+        , Economics.Tier
+        , Economics.ProtocolAccount
+        , Economics.Status
+        , Economics.Scheduler
+        , Economics.Treasury
+        , Economics.CyclesMinting
+        , Economics.RecoveryOrchestrator
+        , Economics.BatchOptimizer
+        , Economics.Tests.AllTests
+        , Economics.Tests.FeeToCyclesE2E
+        -- Storage Layer
+        , OUC.Storages.State
+        , OUC.Storages.SourceOfTruth
         -- Tests
         , OUC.Tests.CoreTests
         , Integration.Tests.AllTests
+        , ThresholdECDSA.Tests.AllTests
 
 main = Integration.Tests.AllTests
 executable = run-tests
