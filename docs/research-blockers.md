@@ -142,7 +142,7 @@ idris2-ouc IC Deployment
 
 ## References
 
-- [idris2-wasm canister_entry.c](../../../idris2-wasm/support/ic0/canister_entry.c) - Working entry point pattern
+- [idris2-wasm canister_entry.c](../../../idris2-wasm/lib/ic0/canister_entry.c) - Working entry point pattern
 - [idris2-wasm build-canister.sh](../../../idris2-wasm/scripts/build-canister.sh) - Working build pipeline
 - [idris2-cdk ICP.IC0](../../../idris2-cdk/src/ICP/IC0.idr) - IC0 FFI declarations
 - [IC Interface Spec](https://internetcomputer.org/docs/current/references/ic-interface-spec) - Official IC0 API

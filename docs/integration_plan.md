@@ -143,8 +143,8 @@ OUC をICP Canisterとして本番稼働させる
 
 **変更ファイル:**
 - `src/Main.idr`: dispatchCommand, setResult/getArg via %foreign, doRegisterAuditor/doSuspendAuditor/doReactivateAuditor
-- `support/ic0/ic0_stubs.c`: ouc_set_result_i32, ouc_get_arg_i32, ouc_c_set_arg_i32, ouc_c_get_result_i32
-- `support/ic0/canister_entry.c`: call_idris2(), CMD_* constants, Update methods wired to Idris2
+- `lib/ic0/ic0_stubs.c`: ouc_set_result_i32, ouc_get_arg_i32, ouc_c_set_arg_i32, ouc_c_get_result_i32
+- `lib/ic0/canister_entry.c`: call_idris2(), CMD_* constants, Update methods wired to Idris2
 
 **次のステップ:**
 1. ⏳ リモートビルドでWASM生成確認 (進行中)

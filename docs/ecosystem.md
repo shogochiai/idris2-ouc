@@ -2,6 +2,70 @@
 
 Self-Amending Protocol実現のためのエコシステム要素と残タスク。
 
+## OUC vs OU 責務分離 (重要)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     OUC (ICP Canister)                           │
+│  ─────────────────────────────────────────────────────────────  │
+│  責務:                                                           │
+│  • OU Registry: 各チェーンのOUアドレス管理                       │
+│  • Auditor管理: Auditor ↔ OU(s) 割当て                          │
+│  • Dashboard: 複数チェーンのOU状態を集約・可視化                 │
+│  • Tx Relay: Threshold ECDSA署名でOUへTx送信                    │
+│                                                                  │
+│  ※ Auditorから見ると OUC が唯一のインターフェース               │
+│  ※ UpgradeProposal は OUC が受けるのではなく OU が受ける        │
+└──────────────────────────┬───────────────────────────────────────┘
+                           │ 監視 / Auditor署名付きTx送信
+           ┌───────────────┼───────────────┐
+           ▼               ▼               ▼
+    ┌──────────┐    ┌──────────┐    ┌──────────┐
+    │ OU (ETH) │    │OU (ARB)  │    │OU (Base) │
+    │ chainId=1│    │chainId=42161│ │chainId=8453│
+    └────┬─────┘    └────┬─────┘    └────┬─────┘
+         │               │               │
+    UpgradeProposal  UpgradeProposal  UpgradeProposal
+    (各OUが独立して受付・Vote・Tally・Dictionary更新)
+```
+
+### Auditor署名 + OUC リレーパターン
+
+```
+Auditor (ブラウザ)
+    │
+    │ 1. Internet Identity / Passkey で認証
+    │ 2. OUC に vote を送信 (Candid call)
+    │    vote(proposalId, approve, chainId, ouAddr)
+    │
+    ▼
+OUC (ICP Canister)
+    │
+    │ 3. caller Principal を検証 (登録済み Auditor か)
+    │ 4. 投票を記録
+    │ 5. 閾値達成を確認 (n-of-m)
+    │ 6. Threshold ECDSA で tx 署名
+    │    calldata = OU.executeApproved(proposalId)
+    │
+    ▼
+OU (EVM Contract)
+    │
+    │ 7. OUC の t-ECDSA 署名を検証
+    │ 8. OUC が承認済み → 処理実行
+```
+
+| 鍵 | 用途 | 保管場所 |
+|---|---|---|
+| Auditor Principal | 投票者識別 | Internet Identity (Passkey) |
+| OUC Threshold ECDSA | tx 署名 (gas支払) + attestation | ICP subnet |
+
+**利点**:
+- Auditor は EVM 秘密鍵不要 (鍵管理簡素化)
+- Passkey による安全な認証 (フィッシング耐性)
+- OUC が唯一の EVM 接点 (gas 管理一元化)
+
+---
+
 ```
 OUC Ecosystem
 │
@@ -12,6 +76,14 @@ OUC Ecosystem
 │   ├── EVM側
 │   │   ├── [x] lazy evm ask           # EVM契約分析 (完了 2025/01/10 確認)
 │   │   │   └── Steps 1-3: LazyCore, Step 4: solc source maps + bytecode tracing
+│   │   ├── [x] lazy evm init          # Scaffolding (2025/01/11)
+│   │   │   │   ※ スマートコントラクト開発の起点
+│   │   │   │   ※ Claude Code Skills が文脈に応じて呼び出し
+│   │   │   ├── [x] プロジェクト構造生成
+│   │   │   │       └── src/{Functions/, Storages/, Tests/, SPEC.toml}
+│   │   │   ├── [x] 初期Schema生成 (テンプレート)
+│   │   │   ├── [x] 初期Functions生成 (Core.idr)
+│   │   │   └── [x] ipkg自動生成
 │   │   └── [x] lazy evm-lifecycle ask # デプロイ/Upgrade助言 (完了 2025/01/10)
 │   │       │   ※ mc (metacontract) パターン対応
 │   │       │   Dictionary: selector → impl マッピング
@@ -53,8 +125,10 @@ OUC Ecosystem
 │   │   ├── [x] EVM.Primitives     # EVM FFI
 │   │   ├── [x] EVM.Storage.*      # ERC-7201 slots
 │   │   ├── [x] Compiler.EVM.*     # Yul codegen
-│   │   └── [x] examples/ERC7546Proxy.idr  # UCS Proxy (693B runtime, 2025/01/10)
-│   │           └── selector → Dictionary.getImplementation → DELEGATECALL
+│   │   ├── [x] examples/ERC7546Proxy.idr  # UCS Proxy (693B runtime, 2025/01/10)
+│   │   │       └── selector → Dictionary.getImplementation → DELEGATECALL
+│   │   └── [x] Nix derivation (nix/idris2-evm-overlay.nix, 2025/01/11)
+│   │           └── idris2-yul binary + TTC library for FABI E2E
 │   │
 │   ├── idris2-subcontract (~/code/idris2-subcontract)
 │   │   │   ※ Solidity版 mc (metacontract) の Idris2 相当
@@ -67,8 +141,15 @@ OUC Ecosystem
 │   │   │       └── computeProxyAddress → deterministic address
 │   │   ├── [x] Contract状態分析API (2025/01/10)
 │   │   │       └── Analysis.idr: takeSnapshot, queryImplementation, addressHasCode
-│   │   └── [x] Upgrade検出API (2025/01/10)
-│   │           └── UpgradeDetection.idr: detectChanges, detectUpgrades, findZombieReferences
+│   │   ├── [x] Upgrade検出API (2025/01/10)
+│   │   │       └── UpgradeDetection.idr: detectChanges, detectUpgrades, findZombieReferences
+│   │   ├── [x] OptimisticUpgrader (2025/01/11, lazy規約準拠)
+│   │   │       ├── Functions/Core.idr: proposeUpgrade, vote, tally
+│   │   │       ├── Storages/Schema.idr: Proposal, Vote, AdminState
+│   │   │       ├── Storages/Slots.idr: ERC-7201 OU storage slots
+│   │   │       ├── Tests/AllTests.idr: SPEC-Test Parity
+│   │   │       └── SPEC.toml
+│   │   └── [x] Nix derivation (nix/idris2-evm-overlay.nix, e11875f)
 │   │
 │   ├── idris2-ouf (~/code/idris2-ouf)
 │   │   │   ※ Optimistic Upgrader Framework
@@ -87,7 +168,7 @@ OUC Ecosystem
 │   │   │   ├── [x] CMD_REGISTER/SUSPEND/REACTIVATE_AUDITOR (Update)
 │   │   │   ├── [x] CMD_SUBMIT_PROPOSAL (Update, Candid text入力)
 │   │   │   └── [x] testEthBlockNumber (HTTP Outcall, ic0_call_*)
-│   │   ├── support/ic0/
+│   │   ├── lib/ic0/
 │   │   │   ├── [x] canister_entry.c  # IC entry points
 │   │   │   ├── [x] ic0_stubs.c       # FFI bridge
 │   │   │   └── [x] wasi_stubs.c      # WASI compat
@@ -117,91 +198,376 @@ OUC Ecosystem
 │   │   │   ├── [x] TxSender/
 │   │   │   └── [x] SPEC.toml      # 復活済み (2025/01/07)
 │   │   │
-│   │   └── src/ERC7546/
-│   │       ├── [x] Dictionary.idr
-│   │       ├── [x] Upgrade.idr
-│   │       └── [x] SPEC.toml      # 復活済み (2025/01/07)
+│   │   ├── src/ERC7546/
+│   │   │   ├── [x] Dictionary.idr
+│   │   │   ├── [x] Upgrade.idr
+│   │   │   └── [x] SPEC.toml      # 復活済み (2025/01/07)
+│   │   │
+│   │   ├── src/FABI/              # 追加 (2025/01/11)
+│   │   │   ├── [x] Core.idr       # Build Rebinding 型定義
+│   │   │   ├── [x] SPEC.toml      # 51 specs (ENV/HASH/EVID/BUILDER/etc.)
+│   │   │   └── [x] Tests/AllTests.idr  # SPEC-Test Parity
+│   │   │
+│   │   └── src/Governance/        # 追加 (2025/01/11)
+│   │       ├── [x] Core.idr       # Governance-by-Observation 型定義
+│   │       ├── [x] SPEC.toml      # 55 specs (USAGE/FAIL/HEALTH/QUAR/etc.)
+│   │       └── [x] Tests/AllTests.idr  # SPEC-Test Parity
+│   │
+│   │   ├── src/Economics/         # 追加 (2025/01/14)
+│   │   │   │   ※ Fee-to-Cycles: ETH fees → ckETH → ICP → Cycles
+│   │   │   │   ※ Integer型使用 (GMP via RefC)
+│   │   │   ├── [x] Treasury.idr       # ckETH/ICP残高、70/30分配
+│   │   │   ├── [x] CyclesMinting.idr  # Minting状態機械、DEX/CMC連携
+│   │   │   ├── [x] SPEC.toml          # 12 specs
+│   │   │   └── [x] Tests/FeeToCyclesE2E.idr  # 12/12 PASS (型レベル)
+│   │   │
+│   │   └── docs/e2e/              # E2Eテストロードマップ (2025/01/14)
+│   │       ├── [x] README.md          # 4シナリオ分離、アクター定義
+│   │       ├── [x] fee-to-cycles.md   # 12/12 PASS
+│   │       ├── [x] http-outcall.md    # Procedure Ready
+│   │       ├── [x] threshold-ecdsa.md # Type Ready
+│   │       ├── [x] erc7546-upgrade.md # Type Ready
+│   │       ├── [x] cketh-bridge.md    # Not Started
+│   │       └── [x] mainnet.md         # Not Started
 │   │
 │   ├── idris2-textdao (~/code/idris2-textdao)
 │   │   └── [x] Reference impl     # UCSパターン適用例
 │   │
-│   ├── idris2-dfx-coverage (~/code/idris2-dfx-coverage)
-│   │   ├── [x] ic-wasm instrument 連携
-│   │   ├── [x] __get_profiling データ取得
-│   │   └── [x] func_id → カバレッジ計算
+│   ├── idris2-icp-indexer (~/code/idris2-icp-indexer) (2025/01/11)
+│   │   │   ※ ICP Canister による分散型 EVM Event Indexer
+│   │   │   ※ The Graph + Vercel + PostgreSQL を1 Canister で代替
+│   │   │   ※ チェーン非依存: 任意EVMチェーンにIndexerインフラ不要で対応
+│   │   │
+│   │   ├── [x] Core.idr - Core Types
+│   │   │       ├── IndexedEvent: blockNumber, txHash, topics, data
+│   │   │       ├── IndexerConfig: chains, contracts, topics filter
+│   │   │       └── BlobData: Ethereum Blob 直接格納対応
+│   │   │
+│   │   ├── [x] Polling.idr - Event Polling
+│   │   │       ├── HTTP Outcall: eth_getLogs(fromBlock, toBlock, topics)
+│   │   │       ├── Timer: 定期ポーリング (ic0_timer)
+│   │   │       └── Cursor管理: lastIndexedBlock per chain
+│   │   │
+│   │   ├── [x] Storage.idr
+│   │   │       ├── Stable Memory: イベントログ永続化 (400GB/canister)
+│   │   │       ├── Index: contract/topic → events
+│   │   │       └── Blob Storage: 大容量データ直接格納
+│   │   │
+│   │   ├── [x] Query.idr - Query API
+│   │   │       ├── Candid: getEventsByContract, getEventsByTopic
+│   │   │       ├── HTTP: REST/JSON endpoint (http_request)
+│   │   │       └── Pagination: cursor-based
+│   │   │
+│   │   ├── [x] SPEC.toml (26 specs) + Tests/AllTests.idr (26 tests)
+│   │   │
+│   │   ├── [ ] OUC統合 (将来)
+│   │   │       ├── OU イベント監視: UpgradeProposed, Executed, etc.
+│   │   │       └── Dashboard データソース
+│   │   │
+│   │   └── [ ] A-Life Economics (2025/01/12 設計)
+│   │           ├── Tier: Archive(¥3) / Economy(¥80) / Standard(¥300) / Real-time(¥4,500)
+│   │           ├── Perpetual Archive: 0.01 ETH で 80年永続
+│   │           ├── Catch-up Sync: 即時復活 (Option A)
+│   │           └── 詳細: docs/a-life-economics.md
 │   │
-│   └── idris2-wasm-coverage (未作成)    # 将来: Native WASM tracing
-│       ├── [ ] WASM実行トレース収集
-│       ├── [ ] PC → Idris2関数マッピング
-│       └── [ ] Vibe Coding対応 (idris2-evm-coverage相当)
+│   │   ┌─────────────────────────────────────────────────────────┐
+│   │   │ ICP Canister Full-Stack 能力                            │
+│   │   ├─────────────────────────────────────────────────────────┤
+│   │   │                                                         │
+│   │   │ 1. 内部データ (Stable Memory / Heap)                    │
+│   │   │    • Auditor Registry, OU Registry                     │
+│   │   │    • Proposal状態, 投票状況                             │
+│   │   │    • Indexed Events                                     │
+│   │   │                                                         │
+│   │   │ 2. HTTP Outcall (任意のHTTPS通信)                       │
+│   │   │    • EVM RPC: eth_getLogs, eth_call, eth_getBalance    │
+│   │   │    • Beacon API: Blob取得 (EIP-4844)                   │
+│   │   │    • 任意API: CoinGecko, Etherscan, ENS, etc.          │
+│   │   │                                                         │
+│   │   │ 3. Dashboard 出力 (http_request Query)                  │
+│   │   │    • /api/auditors  → JSON: Auditor一覧                │
+│   │   │    • /api/ous       → JSON: OU一覧 + チェーン状態      │
+│   │   │    • /api/proposals → JSON: Proposal + 投票状況        │
+│   │   │    • /api/events    → JSON: Indexed イベント           │
+│   │   │    • /dashboard     → HTML: 人間向けUI                 │
+│   │   │                                                         │
+│   │   │ = バックエンド + DB + API aggregator + HTTPサーバ 一体化│
+│   │   └─────────────────────────────────────────────────────────┘
+│   │
+│   └── idris2-dfx-coverage (~/code/idris2-dfx-coverage)
+│       │   ※ WASM coverage 機能を包含 (idris2-wasm-coverage 不要)
+│       ├── [x] ic-wasm instrument 連携 (IcWasm/Instrumenter.idr)
+│       ├── [x] __get_profiling データ取得 (IcWasm/ProfilingParser.idr)
+│       ├── [x] func_id → カバレッジ計算 (CodeCoverage/CodeCoverageAnalyzer.idr)
+│       ├── [x] WASM実行トレース収集 (WasmTrace/TraceEntry.idr, TraceParser.idr)
+│       ├── [x] PC → Idris2関数マッピング (WasmMapper/WasmFunc.idr, NameSection.idr)
+│       ├── [x] IC0 System API モック (Ic0Mock/Ic0Stubs.idr, MockContext.idr)
+│       └── [x] HTTP Outcall検出 (IcWasm/HttpOutcallDetector.idr)
 │
 ├── Failure-Aware Build Infrastructure (FABI)
+│   │   ※ SPEC.toml + Core.idr + Tests/AllTests.idr 完成 (2025/01/11)
 │   │
 │   ├── Reproducible Build Spec
-│   │   ├── [ ] Build environment definition (Docker / Nix / Bazel)
-│   │   ├── [ ] Source + lockfile + env hash schema
-│   │   └── [ ] Build evidence format (hash chain)
+│   │   ├── [x] Build environment definition (Docker / Nix / Bazel)
+│   │   │       └── BuildEnv, ContainerType, ToolVersion in Core.idr
+│   │   ├── [x] Source + lockfile + env hash schema
+│   │   │       └── SourceHash, LockfileHash, EnvHash, InputHash, OutputHash
+│   │   └── [x] Build evidence format (hash chain)
+│   │           └── BuildEvidence, EvidenceChain with previousHash linking
 │   │
 │   ├── n-of-n Builder Network
-│   │   ├── [ ] Independent builder roles
-│   │   ├── [ ] Build result intersection protocol
-│   │   └── [ ] Dispute / mismatch handling
+│   │   ├── [x] Independent builder roles
+│   │   │       └── RegisteredBuilder, BuilderId with stake/baseImage diversity
+│   │   ├── [x] Build result intersection protocol
+│   │   │       └── BuildConsensus (Pending/Agreed/Disputed), n-of-n requirement
+│   │   └── [x] Dispute / mismatch handling
+│   │           └── BuildDispute, DisputeResolution, minInvestigationPeriod
 │   │
 │   ├── Build Rebinding Procedures
-│   │   ├── [ ] Builder replacement flow
-│   │   ├── [ ] Environment migration
-│   │   └── [ ] Emergency rebuild path
+│   │   ├── [x] Builder replacement flow
+│   │   │       └── ReplacementRequest, ReplacementStatus, capability proving
+│   │   ├── [x] Environment migration
+│   │   │       └── MigrationRequest, MigrationStatus, backward compat check
+│   │   └── [x] Emergency rebuild path
+│   │           └── EmergencyBuildRequest, ProvisionalBuild, emergencyTimeout
 │   │
 │   └── Integration with OUC
-│       ├── [ ] Build evidence → OUC proposal schema
-│       ├── [ ] Auditor build verification tooling
-│       ├── [ ] lazy build ask (Failure Sink診断)
-│       └── [ ] mc build 証拠生成コマンド化
+│       ├── [x] Build evidence → OUC proposal schema
+│       │       └── ProposalBuildAttachment with evidenceHash/sourceHash
+│       ├── [x] Auditor build verification tooling
+│       │       └── AuditorBuildVerification with rebuildRequested/verified
+│       ├── [x] Failure Sink diagnostics (f_env/f_repro/f_key/f_ops)
+│       │       └── BuildFailure, RebindingAction, DiagnosticResult
+│       └── [x] Nix flake 環境構築 (2025/01/11 完了)
+│               ├── [x] idris2 + PR #3708 patch (nix/idris2-overlay.nix)
+│               │       └── nixos-unstable, idris2.passthru.unwrapped.overrideAttrs
+│               ├── [~] pack (定義あり、hash 未取得)
+│               ├── [x] evm-flake (nix/evm-overlay.nix)
+│               │       └── [x] foundry 1.5.1 (forge, cast, anvil, chisel)
+│               ├── [x] idris2-evm (nix/idris2-evm-overlay.nix)
+│               │       ├── [x] idris2-cdk (ICP CDK, FRMonad)
+│               │       ├── [x] idris2-yul (Idris2→Yul compiler)
+│               │       ├── [x] idris2-subcontract (UCS + OptimisticUpgrader, e11875f)
+│               │       └── [x] buildEvmContract (Nix function for E2E)
+│               ├── [x] ic-flake (nix/ic-overlay.nix)
+│               │       ├── [x] dfx 0.24.3 (binary distribution)
+│               │       ├── [x] ic-wasm 0.9.0 (pre-built binary)
+│               │       └── [x] didc 2025-12-18 (pre-built binary)
+│               └── [x] lazy CLI 依存 (FFI経由)
+│                       ├── [x] onnxruntime 1.22.2 (ML推論, STI Parity分析)
+│                       └── [x] sqlite 3.51.1 (キャッシュ/インデックス)
+│
+│   ※ Auditor Verification Flow (E2E)
+│   │
+│   │   UpgradeProposal
+│   │   ├── source: idris2-subcontract / idris2-yul / idris2-evm
+│   │   ├── flake.lock (環境固定)
+│   │   └── claimed_bytecode_hash (EVM bytecode)
+│   │             │
+│   │             ▼
+│   │   ┌─────────────────────────────────────────────┐
+│   │   │ Phase 1: Reproducible Build 検証 (前提)    │
+│   │   │   Auditor が Nix + pack build でビルド     │
+│   │   │   → ハッシュ一致確認 (不一致なら却下)      │
+│   │   └─────────────────────────────────────────────┘
+│   │             │ ✓ 一致
+│   │             ▼
+│   │   ┌─────────────────────────────────────────────┐
+│   │   │ Phase 2: 実装監査                          │
+│   │   │   ├── 型安全性 (Idris2 証明)               │
+│   │   │   ├── ビジネスロジック                     │
+│   │   │   └── セキュリティ                         │
+│   │   └─────────────────────────────────────────────┘
+│   │             │ 監査完了
+│   │             ▼
+│   │   ┌─────────────────────────────────────────────┐
+│   │   │ Phase 3: Vote (OUC経由)                    │
+│   │   │   OU登録済み Auditor → OUC canister 投票   │
+│   │   │   → n-of-m 承認 → Dictionary 更新          │
+│   │   └─────────────────────────────────────────────┘
+│   │
+│   └── E2E テスト (2025/01/11 検証完了)
+│       ├── [x] idris2-yul Nix derivation (nix/idris2-evm-overlay.nix)
+│       │       └── 検証済み: Counter.idr → Yul → EVM bytecode
+│       │       └── Hash: 236e94b80534a71792e5fb29689893306c7820457da17a6ecaf8b8119c8cb63c
+│       ├── [x] 決定論性確認 (同一ソース → 同一ハッシュ)
+│       │       └── ビルド2回実行で完全一致確認
+│       ├── [x] idris2-subcontract Nix derivation (2025/01/11)
+│       │       └── OptimisticUpgrader/* (lazy規約準拠, e11875f)
+│       ├── [x] 複数マシンでの再現ビルド検証スクリプト (2025/01/11)
+│       │       └── scripts/verify-reproducible-build.sh
+│       └── [x] Auditor 監査→投票フロー文書化 (2025/01/11)
+│               └── docs/Auditor-Workflow.md: E2E flow diagram
 │
 ├── Self-Amending Protocol Layer
 │   │
-│   ├── Futarchy Annotation (PDF Section 9)
-│   │   ├── [ ] 予測市場コントラクト
-│   │   │   ├── [ ] AMM価格オラクル
-│   │   │   └── [ ] 期待値シグナル取得API
-│   │   ├── [ ] Annotation → Selection圧力変換
-│   │   └── [ ] Observable outcome記録
+│   │   ※ 2025/01/11 設計見直し: 二層ガバナンス + OUC Feedback Loop
 │   │
-│   ├── AI Agent Infrastructure
-│   │   ├── [x] Claude Skills定義 (2025/01/10)
-│   │   │   ├── [x] オンチェーンデータ取得 (ouc-onchain skill)
-│   │   │   ├── [ ] 予測市場価格読取り (Futarchy依存)
-│   │   │   └── [x] Upgrade提案生成 (/propose-upgrade command)
-│   │   ├── [x] 定期監視ループ設計 (ouc-monitor skill)
-│   │   │   ├── [x] Annotation変化検出パターン
-│   │   │   └── [x] Gap→Action変換ルール
-│   │   └── [x] lazy evm-lifecycle統合 (/check-upgrade command)
+│   │   ┌─────────────────────────────────────────────────────────────────┐
+│   │   │              Self-Amending Protocol Architecture                 │
+│   │   ├─────────────────────────────────────────────────────────────────┤
+│   │   │                                                                  │
+│   │   │  ┌──────────────┐                                               │
+│   │   │  │  Inception   │ ← 人間がテキスト合意で更新 (TextDAO的)        │
+│   │   │  │  (語彙注入)   │   IntentKeywords, NonGoals, Boundary          │
+│   │   │  └──────┬───────┘                                               │
+│   │   │         │ 誘導                                                   │
+│   │   │         ▼                                                        │
+│   │   │  ┌──────────────┐    ┌─────────────┐                           │
+│   │   │  │  LLM観測     │ →  │ Auto-Proposal│                          │
+│   │   │  │  (外界情報)   │    │ (Evidence付) │                          │
+│   │   │  └──────────────┘    └──────┬──────┘                           │
+│   │   │                             │                                    │
+│   │   │                             ▼                                    │
+│   │   │                      ┌─────────────┐                            │
+│   │   │                      │  Auditors   │ ← 3層責務                  │
+│   │   │                      │ (検証Gate)  │   Hash/Audit/Inception照合 │
+│   │   │                      └──────┬──────┘                            │
+│   │   │                             │                                    │
+│   │   │                             ▼                                    │
+│   │   │                      ┌─────────────┐                            │
+│   │   │                      │    OUC      │                            │
+│   │   │                      │ (Rebinding) │                            │
+│   │   │                      └──────┬──────┘                            │
+│   │   │              ┌──────────────┼──────────────┐                    │
+│   │   │              ▼              ▼              ▼                    │
+│   │   │         Approved      Rejected         Challenged               │
+│   │   │              │        (Feedback)       (Freeze)                 │
+│   │   │              ▼              │              │                    │
+│   │   │          Execute      Re-propose      Resolve                   │
+│   │   │                                                                  │
+│   │   └─────────────────────────────────────────────────────────────────┘
+│   │
+│   ├── Inception Layer (人間意思注入点)
+│   │   │   ※ 「何を作るか」「何がdriftか」の定義はここでのみ可能
+│   │   │   ※ 実装: idris2-subcontract/Inception/* (2025/01/11)
+│   │   │
+│   │   ├── [x] InceptionSpec 型定義 (Schema.idr)
+│   │   │       ├── IntentKeywords: 特徴語彙（LLM提案を誘導）
+│   │   │       ├── NonGoals: やらないこと
+│   │   │       ├── Boundary: 越えてはいけない線
+│   │   │       └── AllowedChangeKinds: 自動提案が触れる領域
+│   │   │
+│   │   ├── [x] Inception更新プロトコル (Functions/*.idr)
+│   │   │       ├── Propose.idr: テキスト提案 → IPFS hash登録
+│   │   │       ├── Fork.idr: 既存提案のフォーク (TextDAO的熟議)
+│   │   │       ├── Vote.idr: RCV (Ranked Choice Voting)
+│   │   │       └── Resolve.idr: 集計・承認・Inception更新
+│   │   │
+│   │   └── [x] Auto-Adopt Policy (Schema.idr)
+│   │           └── AllowedChangeKinds で自動採用可能な変更種別を定義
+│   │           └── isAutoAdoptable: ChangeKind → Bool
+│   │
+│   ├── Auditors (3層責務)
+│   │   │
+│   │   ├── [x] Layer 1: Hash照合 (Reproducible Build)
+│   │   │       └── build(source, env) → claimed_hash と一致確認
+│   │   │       └── n-of-n builder agreement
+│   │   │       └── 実装: FABI + Nix flake
+│   │   │
+│   │   ├── [x] Layer 2: 通常監査 (Code Audit)
+│   │   │       └── セキュリティ
+│   │   │       └── ロジック正当性
+│   │   │       └── 型安全性 (Idris2証明)
+│   │   │       └── 実装: AuditorPool/Core.idr
+│   │   │
+│   │   └── [x] Layer 3: Inception照合 (Intent Audit) (2025/01/11, 2025/01/14拡張)
+│   │           └── 全A-Life行動がInception語彙と整合するか
+│   │           └── 対象: UpgradeProposal, 投票, 出資判断, 重要行動全般
+│   │           └── Drift検出 (意図からの逸脱)
+│   │           └── AuditorVerdict: Match | DriftDetected | BoundaryViolation
+│   │           └── 実装: AuditorPool/InceptionAudit.idr
+│   │           └── EscalationDecision: NoEscalation | HumanReview | Reject
+│   │           └── FABI管理者不正対策: LLM出力もInception照合で検証
+│   │
+│   ├── OUC Feedback Loop (2025/01/11 完成)
+│   │   │   ※ OUC否決 = Failure Sink ではなく Feedback
+│   │   │   ※ Driftはこの層でほぼ消える（採用前に検出）
+│   │   │   ※ 実装: OUC/Feedback.idr
+│   │   │
+│   │   ├── [x] 基本フロー
+│   │   │       Proposed → Auditing → Approved/Rejected → Executed/Re-proposed
+│   │   │
+│   │   ├── [x] Reject = Feedback event
+│   │   │       ├── RejectCategory/Severity: 構造化否決理由
+│   │   │       ├── FeedbackEvent: 再提案ガイダンス付き
+│   │   │       ├── ProposalLineage: 再提案追跡
+│   │   │       └── canResubmit, resubmitGuidance
+│   │   │
+│   │   └── [x] Challenge/Freeze/Resume
+│   │           ├── raiseChallenge: 異議申し立て
+│   │           ├── freezeProposal: 提案凍結
+│   │           ├── resolveChallenge: 解決 (upheld/rejected)
+│   │           └── resumeProposal: 再開 (決定反転可能)
+│   │
+│   ├── AI Agent Infrastructure (LLM Auto-Proposal)
+│   │   │   ※ LLMは「生成」のみ。採用判断はAuditors + OUC。
+│   │   │
+│   │   ├── [x] 外界観測 (ouc-onchain skill)
+│   │   │       └── EVM/ICP データ取得
+│   │   │       └── Drift検出のための状態監視
+│   │   │
+│   │   ├── [x] Auto-Proposal生成 (/propose-upgrade command)
+│   │   │       └── Inception語彙に誘導されて提案生成
+│   │   │       └── Evidence (source_hash, diff_summary, impact) 付与
+│   │   │
+│   │   ├── [x] 監視ループ (ouc-monitor skill)
+│   │   │       └── 外界変化検出 → 提案トリガー
+│   │   │       └── Health状態監視
+│   │   │
+│   │   └── [x] lazy統合 (/check-upgrade command)
+│   │           └── Local vs Deployed比較
+│   │           └── Pending upgrade検出
 │   │
 │   └── Governance-by-Observation
-│       ├── [ ] 使用シグナル収集
-│       ├── [ ] 失敗記録（FR semantics）
-│       └── [ ] 自動淘汰メカニズム
+│       │   ※ SPEC.toml + Core.idr + Tests/AllTests.idr 完成 (2025/01/11)
+│       ├── [x] 使用シグナル収集
+│       │       └── UsageSignal, AdoptionMetrics, TimeWindow aggregation
+│       ├── [x] 失敗記録（FR semantics）
+│       │       └── FailureRecord, FailureType (f_code/f_audit/f_liveness/f_env/f_key)
+│       │       └── FailureSeverity, FailureStats, failureRate calculation
+│       └── [x] 自動淘汰メカニズム
+│               └── ProtocolHealth state machine (Healthy→Wounded→Drifting→Frozen→Dead)
+│               └── QuarantineAction, QuarantineRule, shouldQuarantine
+│               └── FitnessScore, comparative ranking, bottom percentile flagging
+│               └── RetirementProposal flow with governance approval
 │
 ├── External Dependencies
 │   │
 │   ├── Internet Computer (ICP)
 │   │   ├── [x] Canister deployment
 │   │   ├── [x] HTTP Outcall
-│   │   └── [ ] Threshold ECDSA署名
+│   │   └── [x] Threshold ECDSA署名 (2025/01/11)
+│   │           ├── docs/ThresholdECDSA-Design.md 設計完了
+│   │           ├── src/ThresholdECDSA/Core.idr 型定義
+│   │           ├── src/ThresholdECDSA/FFI.idr C FFIバインディング
+│   │           ├── lib/ic0/threshold_ecdsa.c C実装
+│   │           └── SPEC.toml + Tests/AllTests.idr
 │   │
 │   └── EVM Chains
 │       ├── [x] JSON-RPC接続
-│       ├── [~] Transaction送信（TxSender）
-│       └── [ ] マルチチェーン対応
+│       ├── [x] Transaction送信（TxSender）(2025/01/11)
+│       │       ├── TxSender/Rlp.idr - EIP-1559 RLPエンコード
+│       │       ├── TxSender/Signing.idr - t-ECDSA統合
+│       │       └── ThresholdECDSA連携でEVM tx署名
+│       └── [x] OU Registry (マルチチェーン管理) (2025/01/11)
+│               ├── src/MultiChain/Registry.idr: OU所在チェーン管理
+│               ├── ChainId, ChainConfig, ChainRegistry 型
+│               ├── SPEC.toml + Tests/AllTests.idr
+│               └── ※ Cross-Chain execution は不要 (各OUが独立処理)
 │
 └── Documentation & Specs
     ├── [x] Self-Amending Protocols.pdf
     ├── [x] FRC.pdf (FR Monad理論)
     ├── [x] AGA Loop.pdf
     ├── [x] SPEC.toml群の復活/再設計 (7ファイル復活済み)
-    ├── [ ] Claude Skills仕様書
+    ├── [x] ClaudeSkills-Spec.md (AI Agent Skills, 2025/01/11)
     ├── [x] FABI.md (Failure-Aware Build Infrastructure)
-    └── [x] OUC-Spec.md (Optimistic Upgrader Canister)
+    ├── [x] OUC-Spec.md (Optimistic Upgrader Canister)
+    ├── [x] Auditor-Workflow.md (E2E Auditor Flow, 2025/01/11)
+    ├── [x] MultiChain-Design.md (OU Registry設計, 2025/01/11)
+    ├── [x] ThresholdECDSA-Design.md (t-ECDSA Signing, 2025/01/11)
+    └── [x] a-life-economics.md (A-Life Economics, 2025/01/12)
 ```
 
 ## ERC-7546 Proxy Deployment Architecture (2025/01/10)
@@ -290,7 +656,7 @@ Where:
 commit = "0ec96ff"  # ERC7546Proxy.idr added
 
 [custom.all.idris2-subcontract]
-commit = "794f5b5"  # ProxyFactory added
+commit = "e11875f"  # OptimisticUpgrader (lazy規約準拠)
 url = "https://github.com/shogochiai/idris2-subcontract"
 
 [custom.all.idris2-ouf]
@@ -334,7 +700,7 @@ Source Code → [FABI] → Bytecode + Evidence → [OUC] → Protocol State
 **経緯**:
 1. `tests/ic0-ffi-repro/` で最小再現テスト作成時、`ic0_time()` が 0 を返す問題が発生
 2. 長時間の調査の結果、WASM `call_indirect` の型不一致を疑った
-3. しかし **本体の `support/ic0/canister_entry.c` は正しく実装されていた**
+3. しかし **本体の `lib/ic0/canister_entry.c` は正しく実装されていた**
 4. テスト再現用のスタブ (`ic0_test_stubs.c`) だけが誤っていた
 
 **根本原因**:
@@ -650,7 +1016,7 @@ HTTP Outcall は IC 管理キャニスター (`aaaaa-aa`) への Inter-canister 
 
 ### Phase 2: C側実装 ✅
 
-**実装ファイル**: `support/ic0/canister_entry.c`
+**実装ファイル**: `lib/ic0/canister_entry.c`
 
 | 機能 | 状態 | 行番号 |
 |------|------|--------|
@@ -691,10 +1057,36 @@ dfx canister call ouc testEthBlockNumber
 
 | タスク | 優先度 | 状態 |
 |--------|--------|------|
-| Candid レスポンスデコード | P1 | 設計済み |
+| Candid レスポンスデコード | P1 | **完了** (2025/01/11) |
 | エラーハンドリング強化 | P2 | 未着手 |
 | 複数 RPC エンドポイント対応 | P2 | 未着手 |
-| Mainnet E2E テスト | P1 | 未着手 |
+| Mainnet E2E テスト | P1 | **完了 (2026/01/13)** |
+
+### Mainnet E2E テスト結果 (2026/01/13)
+
+```
+dfx canister call ouc testEvmRpc --network ic
+→ {"jsonrpc":"2.0","id":1,"result":"0x26dd286"}  ✅
+
+# 0x26dd286 = Block 40,751,750 (Base Mainnet)
+# OUC → EVM RPC Canister → Base Mainnet パス完全動作
+```
+
+| テスト | 結果 | 備考 |
+|--------|------|------|
+| `testEthBlockNumber` (直接HTTP Outcall) | ⚠️ コンセンサス失敗 | 各レプリカが異なるブロック番号受信 |
+| `testEvmRpc` (EVM RPC Canister経由) | ✅ 成功 | Base Mainnet block 40,751,750 |
+
+**学び**:
+- 直接HTTP Outcallで時変データ（ブロック番号等）を取得するとコンセンサス失敗
+- EVM RPC Canister経由なら安定（内部でコンセンサス処理済み）
+- 本番運用ではEVM RPC Canister使用を推奨
+
+**Candid レスポンスデコード実装内容** (canister_entry.c):
+- `parse_leb128_at()`: LEB128パーサ
+- `parse_http_response_body()`: HttpResponse Candid record パース
+- `extract_jsonrpc_result()`: JSON-RPC結果抽出
+- `http_reply_callback()`: 完全なレスポンス処理
 
 ## Spec-Test Parity (LLM自動検証)
 
@@ -755,16 +1147,15 @@ dfx canister call ouc testEthBlockNumber
     └── idris2-ouc (src/*) [idris2-wasm for ICP]
         │   → `lazy dfx ask --steps=1,2` (未実装)
         │
-        │   SPEC format: [[spec]] id="${prefix}_XXX_NNN" (旧形式)
-        │   → 正規フォーマット移行が必要
+        │   SPEC format: [[spec]] id="REQ_XXX_NNN" (正規フォーマット移行完了 2025/01/11)
         │
-        ├── [~] OUC/SPEC.toml + Tests/CoreTests.idr
-        ├── [~] Integration/SPEC.toml + Tests/AllTests.idr
-        ├── [ ] AuditorPool/SPEC.toml (テスト未作成)
-        ├── [ ] Rewards/SPEC.toml (テスト未作成)
-        ├── [ ] Proposals/SPEC.toml (テスト未作成)
-        ├── [ ] HttpOutcall/SPEC.toml (テスト未作成)
-        └── [ ] ERC7546/SPEC.toml (テスト未作成)
+        ├── [x] OUC/SPEC.toml + Tests/CoreTests.idr
+        ├── [x] Integration/SPEC.toml + Tests/AllTests.idr (AuditorPool, Rewards, Proposals カバー)
+        ├── [x] AuditorPool/SPEC.toml (REQ_POOL_*, Integration tests でカバー)
+        ├── [x] Rewards/SPEC.toml (REQ_REW_*, Integration tests でカバー)
+        ├── [x] Proposals/SPEC.toml (REQ_PROP_*, Integration tests でカバー)
+        ├── [x] HttpOutcall/SPEC.toml + Tests/AllTests.idr (2025/01/11)
+        └── [x] ERC7546/SPEC.toml + Tests/AllTests.idr (2025/01/11)
 ```
 
 ### SPEC.toml フォーマット比較
@@ -971,7 +1362,7 @@ Test Coverage Gap = 「テスト書いたけど実行されてないコードが
 │   └── 非決定性
 │       └── ic0_time, performance_counter は固定値 or シード
 │
-└── 参考: support/ic0/ic0_stubs.c の実装を流用
+└── 参考: lib/ic0/ic0_stubs.c の実装を流用
 ```
 
 ### Phase 4: lazy dfx ask 統合
@@ -1105,15 +1496,638 @@ Test Coverage Gap = 「テスト書いたけど実行されてないコードが
    - autoAssignAuditors: 推奨パラメータに基づく監査者選出
 
 ### P2: Self-Amending基盤
-1. [ ] Futarchy予測市場コントラクト (大規模実装)
-2. [x] Claude Skillsオンチェーンアクセス (2025/01/10)
+1. [x] **Inception Layer 型定義** (2025/01/11)
+   - ✅ idris2-subcontract/Inception/* 完成
+   - InceptionSpec, TextProposal, RankedVote, DriftVerdict 型
+   - Propose/Fork/Vote/Resolve 関数群
+   - SPEC.toml + Tests/AllTests.idr
+2. [x] **Auditors Layer 3: Inception照合** (2025/01/11)
+   - ✅ AuditorPool/InceptionAudit.idr 完成
+   - auditAgainstInception, analyzeDrift, shouldEscalate
+   - DriftSeverity, AuditorVerdict, EscalationDecision 型
+   - SPEC.toml 16 specs追加
+3. [x] **lazy evm init Scaffolding** (2025/01/11)
+   - ✅ Evm/Init/Init.idr 完成 (lazy/pkgs/LazyEvm)
+   - テンプレート生成: Schema, Core, Tests, SPEC.toml, ipkg
+4. [x] Claude Skillsオンチェーンアクセス (2025/01/10)
    - ouc-onchain: EVM/ICP データ取得パターン
    - /check-upgrade: Upgrade状態確認
    - /propose-upgrade: 提案生成・送信
-3. [x] AI Agent監視ループ設計 (2025/01/10)
+5. [x] AI Agent監視ループ設計 (2025/01/10)
    - ouc-monitor: 監視ループインフラ設計
 
 ### P3: 本番運用
-1. マルチチェーン対応
-2. Threshold ECDSA
-3. 自動淘汰メカニズム
+1. [x] **OUC Feedback Loop完成** (2025/01/11)
+   - ✅ OUC/Feedback.idr 完成
+   - RejectCategory/Severity, FeedbackEvent, ProposalLineage
+   - Challenge/Freeze/Resume フロー
+   - SPEC.toml 15 specs追加
+2. [x] **Threshold ECDSA FFI統合** (2025/01/11)
+   - ✅ Core.idr: 型定義 (EcdsaCurve, KeyId, DerivationPath, EcdsaSignature, etc.)
+   - ✅ FFI.idr: C FFIバインディング + high-level API (signWithEcdsa)
+   - ✅ threshold_ecdsa.c: LEB128 + Candid encoding + ic0_call_* 統合
+   - ✅ SPEC.toml 20+ specs + Tests/AllTests.idr 19 tests
+3. [x] **OU Registry + Auditor Relay** (2025/01/11)
+   - ✅ MultiChain/Registry.idr: チェーン管理 (ChainId, ChainConfig, ChainRegistry)
+   - ✅ MultiChain/OURegistry.idr: OU追跡 (RegisteredOU, OUStateSnapshot)
+   - ✅ MultiChain/AuditorRelay.idr: 署名収集 (AuditorApproval, PendingApprovalCollection)
+   - ✅ Default configs: Ethereum, Arbitrum, Base
+   - ✅ SPEC.toml 35+ specs + Tests/AllTests.idr 38 tests (all passing)
+   - ※ Cross-Chain execution は不要 (各OUが独立処理)
+4. [x] **自動淘汰メカニズム** (Governance/Core.idr に実装済み)
+   - ✅ FitnessScore: 選択圧 (usage/reliability/adoption/recency)
+   - ✅ HealthAssessment: Healthy → Wounded → Drifting → Frozen → Dead
+   - ✅ QuarantineRule: Critical failure → 自動 Freeze
+   - ✅ RetirementProposal: 90日 Frozen → governance 承認 → Dead
+
+## A-Life Economics (2025/01/14 更新)
+
+Self-Amending Protocol の持続可能な経済設計。
+
+### 経済モデル分割
+
+| ドキュメント | 内容 |
+|-------------|------|
+| [economics/ouc.md](./economics/ouc.md) | OUC/Indexer の Tier 課金・収益モデル |
+| [economics/a-life.md](./economics/a-life.md) | A-Life 自律経済 (責務分離・検証) |
+
+### A-Life 責務分離 (2025/01/14)
+
+```
+┌─────────────────┬───────────────────────────────────────┐
+│ A-Life (LLM)    │ 開発(lazy ask), DevOps(lazy lifecycle)│
+│                 │ 価値提供(CLI-Canister-EVM), 課金      │
+├─────────────────┼───────────────────────────────────────┤
+│ Owner (Inception)│ 意志, 市場センシング, 自己評価       │
+└─────────────────┴───────────────────────────────────────┘
+
+インフラ完備状況:
+  開発: lazy ask ✓
+  DevOps: lazy evm-lifecycle / lazy dfx-lifecycle ✓
+  価値提供: CLI-Canister-EVM ✓
+  課金: ckETH/cycles ✓
+  意志注入: Inception ✓
+
+結論: インフラは揃っている。あとは動かすフェーズ。
+```
+
+### 経済モデル検証 (精査後 2025/01/14)
+
+| 検証項目 | 結果 | 備考 |
+|---------|------|------|
+| 固定費0% | △ 条件付き | ICP/EVMは0%、定額LLM選択時は$20-200/月 |
+| 損益分岐点 | 存在 | ~$30/月 (非常に低い) |
+| 利益率70% | ✓ 成立 | 収益$500/月超で収束 |
+| 非線形成長 | ✓ 余地あり | LLM固定費はスケール不変 |
+| Meme耐性 | 設計中 | 内部留保・生存者設計が必要 |
+| 成熟ロードマップ | Stage 1 | Stage 2-3は資本蓄積後 |
+
+### Tier 別料金
+
+| Tier | Sync 頻度 | 月額 | ユースケース |
+|------|-----------|------|--------------|
+| **Real-time** | 1/分 | ¥4,500 | DEX, MEV |
+| **Standard** | 1/15分 | ¥300 | 一般プロトコル |
+| **Economy** | 1/時 | ¥80 | 低頻度更新 |
+| **Archive** | 1/日 | ¥3 | 休眠プロジェクト |
+
+### Perpetual Archive
+
+```
+「一度払えば永久に残る」
+
+0.01 ETH ($25) → 80年分の Archive Tier
+0.02 ETH ($50) → Real-time 1ヶ月 + 即時 Catch-up
+```
+
+### Tier 昇降システム
+
+```
+Archive (休眠)
+    ↓  寄付: 0.02 ETH
+Real-time 1ヶ月 (即時 Catch-up sync)
+    ↓  残高チェック
+継続 or Archive に戻る
+```
+
+### TheGraph との差別化
+
+| 条件 | 勝者 |
+|------|------|
+| 1チェーン + 低クエリ | TheGraph (無料) |
+| 1チェーン + 高クエリ | **ICP (9倍安い)** |
+| マルチチェーン | **ICP (10倍安い)** |
+| Perpetual Archive | **ICP only** |
+| t-ECDSA 統合 | **ICP only** |
+
+### 固定費 0% モデル (※条件付き)
+
+```
+ICP/EVM コスト構造:
+  HTTP Outcall : 100% 変動
+  Query        : 100% 変動
+  Storage      : 100% 変動
+  → 固定費率: ほぼ 0%
+
+※ ただし定額制 LLM 選択時は追加の固定費:
+  Claude Pro/Max: $20-200/月
+  損益分岐点: ~$30/月 (非常に低い)
+  $500/月超で利益率 70% に収束
+
+帰結:
+  1. 損益分岐点は存在するが非常に低い
+  2. スケールダウンリスク低 (損益分岐点が低いため)
+  3. 無限スケール可能 (LLM固定費はスケール不変)
+  4. 開発者1人で構築・運営可能
+```
+
+**詳細**: [LLM コストモデル課題解決ツリー](#llm-コストモデル課題解決ツリー-20250114)
+
+### スケール試算 (バッチ最適化後)
+
+| 規模 | Archive単価 | 月間コスト | 年間利益 | 利益率 |
+|------|------------|-----------|----------|--------|
+| 1K | ¥3 | ¥50K | ¥1.4M | 70% |
+| 10K | ¥0.6 | ¥200K | ¥17M | 70% |
+| 100K | ¥0.1 | ¥600K | ¥188M | 70% |
+| 1M | ¥0.04 | ¥4.8M | ¥1.9B | 70% |
+| 10M | ¥0.036 | ¥48M | ¥19B | 70% |
+
+**利益率一定 = 固定費 0% の証左**
+
+### ビジョン: 無限スケール
+
+```
+Phase 1: DeFi (~100K)
+Phase 2: あらゆる DAO (~10M)
+  - 自治会、マンション理事会
+  - カスタム DAO の大衆化
+Phase 3: ロボット経済 (~1B+)
+  - ロボットの可処分所得
+  - 人間-ロボット共存社会のインフラ
+```
+
+### 実装優先度
+
+| Phase | タスク | 状態 |
+|-------|--------|------|
+| P0 | Fee-to-Cycles 型レベル実装 | [x] 完了 (12/12 tests, 2025/01/14) |
+| P0 | HTTP Outcall E2E | [ ] Mainnet待ち |
+| P0 | t-ECDSA E2E | [ ] Mainnet待ち |
+| 1 | Archive Tier + Balance tracking | [x] 完了 (Tier.idr, ProtocolAccount.idr) |
+| 1 | Status state machine (ECON-006-008) | [x] 完了 (Status.idr, 10 tests) |
+| 2 | 4 Tier + 自動管理 + Catch-up (即時) | [x] 完了 (CatchUpSync.idr, RecoveryOrchestrator.idr, 20 tests) |
+| 3 | バッチポーリング最適化 | [x] 完了 (BatchOptimizer.idr, 10 tests) |
+| 4 | Dashboard UI | [ ] |
+| 5 | OUC 統合 | [ ] |
+
+**E2E テスト詳細**: [docs/e2e/README.md](./e2e/README.md)
+
+## E2E テスト課題解決ツリー (2025/01/14)
+
+### 経済モデルから帰納されるテストシナリオ
+
+docs/economics/ から導出したテスト可能なシナリオ。
+
+**検証方法の分類**:
+| 方法 | 適用基準 | メリット |
+|------|----------|----------|
+| **型** | 純粋関数、算術的正しさ | コンパイル時保証、実行不要 |
+| **単体** | 状態遷移、mock可能 | 高速、決定的 |
+| **E2E** | 外部依存あり | 統合確認 |
+
+**E2E テスト戦略**: [docs/e2e/README.md - Scenario 5](./e2e/README.md#scenario-5-tier-economics-derived-from-docseconomics)
+
+```
+出典: economics/ouc.md (Tier システム、Perpetual Archive)
+│
+│ ┌─────────────────────────────────────────────┐
+│ │ 凡例: [型] = 型レベル保証                   │
+│ │       [単体] = 単体テスト                   │
+│ │       [E2E] = E2Eテスト (外部依存)          │
+│ └─────────────────────────────────────────────┘
+│
+├── ECON-001: Tier 計算テスト [型]
+│   │   入力: balance 金額
+│   │   期待: 正しい Tier 割当て
+│   │
+│   │   テストケース:
+│   │   - 3B cycles → Archive
+│   │   - 80B cycles → Economy
+│   │   - 300B cycles → Standard
+│   │   - 4500B cycles → RealTime
+│   │
+│   │   検証: 依存型で閾値をコンパイル時証明
+│   │
+│   └── [x] 実装: Economics/Tier.idr
+│           - calculateAffordableTier: balance → Tier
+│           - tierMonthlyCost, tierDailyCost
+│           - 8 unit tests (ECON_TIER_001-008)
+│
+├── ECON-002: 寄付 → アップグレード フロー [単体]
+│   │   入力: protocolId, donation amount
+│   │   期待: balance 増加、Tier 昇格、Catch-up 発火
+│   │
+│   │   フロー:
+│   │   donate(protocolId, 0.02 ETH)
+│   │     → balance += amount
+│   │     → newTier = RealTime
+│   │     → triggerCatchUpSync()
+│   │     → emit TierUpgraded
+│   │
+│   │   検証: 状態遷移ロジックを mock でテスト
+│   │
+│   └── [x] 実装: Economics/ProtocolAccount.idr
+│           - donate: 残高増加 + Tier再計算
+│           - DonationResult with previousTier/newTier
+│           - 10 unit tests (ECON_ACCT_001-010)
+│
+├── ECON-003: 日次 Tier チェック (自動降格) [単体]
+│   │   入力: 時間経過、balance 消費
+│   │   期待: balance 不足時に自動降格
+│   │
+│   │   フロー:
+│   │   dailyTierCheck()
+│   │     → balance < dailyCost
+│   │     → downgrade to affordable tier
+│   │     → emit TierDowngraded
+│   │
+│   │   検証: Timer mock で時間進行テスト
+│   │
+│   └── [x] 実装: Economics/Scheduler.idr + ProtocolAccount.idr
+│           - processHeartbeat: 日次デダクション
+│           - dailyDeduction: 残高減少 + Tier再計算
+│           - 7 unit tests (ECON_SCHED_001-007)
+│
+├── ECON-004: Catch-up Sync 実行 [E2E]
+│   │   入力: monthsArchived, targetTier
+│   │   期待: 正しいコスト計算、sync 完了
+│   │
+│   │   計算式:
+│   │   blocksToSync = monthsArchived * 30 * 24 * 60 * 5
+│   │   callsNeeded = blocksToSync / 1000
+│   │   cyclesCost = callsNeeded * 500_000_000
+│   │
+│   │   例: 6ヶ月 → 22B cycles
+│   │
+│   │   外部依存: External Indexer (HTTP Outcall)
+│   │
+│   ├── [x] 型レベル: HttpOutcall/CatchUpSync.idr
+│   │       - calcBlocksToSync, calcCallsNeeded, calcCatchUpCost
+│   │       - CatchUpRequest state machine (Pending→InProgress→Completed)
+│   │       - 10 unit tests (ECON_CATCHUP_001-010)
+│   └── [ ] E2E: 同期後のブロック番号確認
+│
+├── ECON-005: Perpetual Archive 年数計算 [型]
+│   │   入力: ETH amount
+│   │   期待: 正しい年数計算
+│   │
+│   │   計算式:
+│   │   0.001 ETH → 8年
+│   │   0.01 ETH → 80年
+│   │   0.1 ETH → 800年
+│   │
+│   │   検証: 算術的正しさを型で証明
+│   │
+│   └── [x] 実装: Economics/Tier.idr
+│           - calculateArchiveYears: balance → years
+│           - calculateMonthsAtTier: balance × tier → months
+│
+├── ECON-006: Archive 状態での Cycles 枯渇 [E2E]
+│   │   入力: Archive Tier + cycles = 0
+│   │   期待: SUSPENDED 状態に遷移
+│   │
+│   │   重要: ETH 残高があっても cycles 枯渇で停止
+│   │   Archive Tier でも storage/heartbeat に cycles 必要
+│   │
+│   │   外部依存: ICP runtime (実際の cycles 消費)
+│   │
+│   ├── [x] 型レベル: Economics/Status.idr (AccountStatus state machine)
+│   │       - checkCyclesAndSuspend: ACTIVE → SUSPENDED
+│   │       - 10 unit tests (ECON_STATUS_001-010)
+│   └── [ ] E2E: cycles 枯渇後の query/update 挙動
+│
+├── ECON-007: Archive からの復帰フロー [E2E]
+│   │   入力: SUSPENDED 状態 + 寄付
+│   │   期待: SUSPENDED → RECOVERING → ACTIVE
+│   │
+│   │   フロー:
+│   │   donate() → Tier昇格 → calcCatchUpCost()
+│   │            → startCatchUpSync() → ACTIVE
+│   │
+│   │   長期 Archive 後: 99000 blocks → ~50B cycles
+│   │
+│   │   外部依存: External Indexer, ICP runtime
+│   │
+│   ├── [x] 型レベル: Economics/Status.idr (Recovery state machine)
+│   │       - startRecovery: SUSPENDED → RECOVERING
+│   │       - updateRecovery: progress tracking
+│   │       - completeRecovery: RECOVERING → ACTIVE
+│   ├── [x] 統合レベル: Economics/RecoveryOrchestrator.idr
+│   │       - initiateRecovery: Status + CatchUp統合
+│   │       - processRecoveryBatch: バッチ処理と進捗追跡
+│   │       - 10 unit tests (ECON_RECOVERY_001-010)
+│   └── [ ] E2E: 状態遷移と同期進捗確認
+│
+└── ECON-008: Cycles 補充フロー [E2E]
+    │   入力: cycles < threshold
+    │   期待: ETH → ICP → Cycles 自動変換
+    │
+    │   フロー:
+    │   lowCyclesDetected() → calcNeeded()
+    │                      → swapETH→ICP → mintCycles()
+    │
+    │   外部依存: DEX, CMC (ICP canisters)
+    │
+    ├── [x] 型レベル: Economics/Status.idr (Top-up triggers)
+    │       - shouldTriggerTopUp: watermark-based detection
+    │       - calculateTopUpAmount: target computation
+    └── [ ] E2E: 自動補充トリガーと変換確認
+```
+
+### 既存 E2E シナリオ
+
+```
+課題: A-Life Self-Sustaining Loop を E2E で検証する
+│
+├── Scenario 1: Economics Flow (Fee-to-Cycles)
+│   │
+│   │   User → ckETH Minter → OUC → DEX → CMC → Cycles
+│   │
+│   ├── [x] Fee-to-Cycles 型レベル (12/12 tests)
+│   └── [ ] ckETH Bridge + DEX + CMC 実E2E
+│
+├── Scenario 2: Cross-Chain Communication
+│   │
+│   │   OUC Canister ↔ EVM Chain
+│   │
+│   ├── [x] HTTP Outcall → EVM RPC (Mainnet検証済み)
+│   ├── [ ] t-ECDSA → EVM Tx 送信
+│   └── [ ] EVM State Read via OUC
+│
+├── Scenario 3: Auditor Assignment & Voting
+│   │
+│   │   OUC → assignAuditors() → OU Contract
+│   │   Auditors → vote() → OUC → executeApproved() → OU
+│   │
+│   └── [~] Type Ready (AuditorPool, MultiChain 実装済み)
+│
+├── Scenario 4: Upgrade Execution
+│   │
+│   │   OU Contract → executeUpgrade() → Dictionary
+│   │
+│   └── [x] ERC7546 Type Ready
+│
+└── Full E2E: ETH deposit → Cycles → Upgrade
+    └── [ ] Not Started
+```
+
+**テスト戦略詳細**: [docs/e2e/README.md](./e2e/README.md)
+
+## A-Life 成熟モデル課題解決ツリー (2025/01/14)
+
+```
+課題: A-Life の段階的成熟と領域拡大を設計する
+│
+├── 成熟の原則
+│   ├── (1) アセットライトから始まる (物理資産不要)
+│   ├── (2) A-Lifeにアクセシブルなものから広がる (API経由)
+│   ├── (3) 資本蓄積に応じて領域が拡大
+│   └── (4) 物理世界へは最後に進出
+│
+├── Stage 1: ソフトウェア純粋領域
+│   │
+│   │   必要資本: ~$30/月
+│   │   物理依存: なし
+│   │   成熟速度: 最速
+│   │
+│   ├── [ ] メールサービス自動化
+│   ├── [x] SaaSツール (lazy CLI) ← 現在
+│   ├── [ ] 軽量DeFi (流動性不要の仲介)
+│   ├── [ ] 自治DAO管理 (議事録、投票)
+│   └── [ ] コンテンツ生成 (記事、翻訳、要約)
+│
+├── Stage 2: 計算資源・金融領域
+│   │
+│   │   必要資本: ~$10K-1M
+│   │   物理依存: 間接的 (データセンター)
+│   │   前提: Stage 1 からの資本蓄積
+│   │
+│   ├── [ ] GPU資源運用 (推論サービス)
+│   ├── [ ] 分散ストレージノード運営
+│   ├── [ ] 資本集約DeFi (レンディング、MM)
+│   ├── [ ] スマートコントラクト保険
+│   └── [ ] A-Life ポートフォリオ運用
+│
+├── Stage 3: 物理世界接続
+│   │
+│   │   必要資本: ~$10M+
+│   │   物理依存: 直接的 (ロボット、設備)
+│   │   前提: ロボットインターフェース普及
+│   │
+│   ├── [ ] 自動物流
+│   ├── [ ] 工場運営
+│   ├── [ ] 自動農場
+│   └── [ ] 無人店舗
+│
+└── 統廃合メカニズム
+    │
+    ├── [ ] A-Life 間 M&A プロトコル
+    │       ├── Inception 整合性判定
+    │       ├── veToken 交換比率算定
+    │       └── ガバナンス統合
+    │
+    ├── [ ] アセット移動最適化
+    │       ├── Stage 間資本移動
+    │       ├── A-Life 間出資
+    │       └── 領域間シフト
+    │
+    └── [ ] 清算・撤退フロー
+            └── 不採算 A-Life からの資本回収
+
+タイムライン (推定):
+  Stage 1: 2025-2027 (現在)
+  Stage 2: 2026-2030
+  Stage 3: 2028-2032+ (ロボットインターフェース普及後)
+```
+
+**詳細**: [economics/maturity.md](./economics/maturity.md)
+
+## Meme 経済耐性課題解決ツリー (2025/01/14)
+
+```
+課題: Meme バブル崩壊後も生存する A-Life を設計する
+│
+├── バブルサイクル (不可避)
+│   │
+│   │   技術導入 → 社会的注目 → 過剰期待 → 崩壊 → 実用化
+│   │
+│   ├── FOMO 駆動要因
+│   │   ├── 高利回り広告
+│   │   ├── AI 生成コンテンツ
+│   │   └── 期待値インフレ
+│   │
+│   └── 沈静化トリガー
+│       ├── 価格崩壊
+│       ├── 大型詐欺露見
+│       └── 規制介入
+│
+├── 生存者設計要件
+│   │
+│   ├── [x] 実価値生産
+│   │       └── OUC: 監査・アップグレードの実サービス
+│   │
+│   ├── [x] 明確な Inception
+│   │       └── IntentKeywords, NonGoals, Boundary 定義
+│   │
+│   ├── [x] 健全ガバナンス
+│   │       └── Auditor Pool + n-of-m 承認
+│   │
+│   └── [ ] 十分な内部留保
+│           ├── 6ヶ月分運営費の確保
+│           └── 収益の一部を自動積立
+│
+├── OUC の長期ポジショニング
+│   │
+│   ├── [x] 信頼性インフラとしての価値
+│   │       └── Reproducible Build + Auditor 検証
+│   │
+│   ├── [ ] バブル期収益の蓄積
+│   │       └── Tier 収益 → Treasury 自動積立
+│   │
+│   └── [ ] 沈静後の寡占ポジション確立
+│           └── 生存者統合の受け皿
+│
+└── 実装タスク
+    │
+    ├── [ ] Treasury 自動積立ロジック
+    │       └── Economics/Treasury.idr 拡張
+    │
+    ├── [ ] 内部留保モニタリング
+    │       └── Dashboard: 運営費何ヶ月分か表示
+    │
+    └── [ ] 統合受入 API
+            └── 他 A-Life からの移行パス
+```
+
+**詳細**: [economics/meme.md](./economics/meme.md)
+
+## LLM コストモデル課題解決ツリー (2025/01/14)
+
+```
+課題: A-Life 運営の LLM コストを最適化する
+│
+├── コスト構造の現実
+│   │
+│   │   ※ ecosystem.md「固定費0%」は ICP/EVM のみの話
+│   │   ※ 定額制 LLM 選択時は固定費が発生する
+│   │
+│   │   定額制LLM選択時:
+│   │     固定費 = $20-200/月 (LLM)
+│   │     変動費 = ICP + EVM (従量)
+│   │
+│   │   API従量制LLM選択時:
+│   │     固定費 = $0
+│   │     変動費 = ICP + EVM + LLM (全て従量)
+│   │
+│   └── 損益分岐点: ~$30/月 (非常に低い)
+│
+├── スケール戦略
+│   │
+│   │   立ち上げ: $20固定 で試行錯誤 (Rate Limit 内)
+│   │   成長:     $20固定 + 超過分 API
+│   │   大規模:   API従量 (固定費ゼロ回帰)
+│   │
+│   ├── [ ] LLM 使用量モニタリング
+│   │       └── Rate Limit 到達検知
+│   │
+│   ├── [ ] 動的切替ロジック
+│   │       └── 定額 → API フォールバック
+│   │
+│   └── [ ] コスト最適化レポート
+│           └── 月次: 定額 vs 従量の比較
+│
+├── 非線形成長ドライバー
+│   │
+│   │   収益 × N → LLM 固定費は同じ → 利益率向上
+│   │
+│   ├── [x] A-Life 自律開発 (lazy ask)
+│   ├── [x] Auditor Pool ネットワーク効果
+│   ├── [x] 1 Canister で N チェーン対応
+│   └── [ ] CLI → Web/App/IoT 拡張
+│
+└── 利益率収束
+    │
+    │   $500/月超で 70% に収束
+    │
+    └── [ ] 利益率モニタリング Dashboard
+            └── 現在の利益率 + 収束予測
+```
+
+**詳細**: [economics/a-life.md](./economics/a-life.md)
+
+## マクロ競争環境課題解決ツリー (2025/01/14)
+
+```
+課題: A-Life が従来 SaaS を置換する競争優位を確立する
+│
+├── 競争優位の源泉
+│   │
+│   │   A-Life 利益率: 60-70%
+│   │   従来 SaaS:     10-30%
+│   │
+│   ├── [x] 人件費ゼロ (LLM 代替)
+│   ├── [x] 24/7 稼働 (シフト不要)
+│   ├── [x] 即時スケール (人員採用不要)
+│   └── [x] 品質保証自動化 (Auditor Pool)
+│
+├── GPU/LLM コスト低下トレンド
+│   │
+│   │   GPU 供給増加 → LLM コスト低下
+│   │   → A-Life 競争力さらに向上
+│   │
+│   ├── [ ] コスト低下の自動反映
+│   │       └── Tier 料金の動的調整
+│   │
+│   └── [ ] GPU 中古市場監視
+│           └── Stage 2 進出タイミング判定
+│
+├── 政治経済リスク対策
+│   │
+│   │   4つの選択肢:
+│   │     Exit (撤退)
+│   │     Voice (抗議)
+│   │     Loyalty (従順)
+│   │     Confiscation (没収) ← 第四の選択
+│   │
+│   ├── [x] 分散インフラ (ICP/EVM)
+│   │       └── 単一法域の没収リスク軽減
+│   │
+│   ├── [x] Threshold ECDSA (鍵分散)
+│   │       └── 鍵没収の困難化
+│   │
+│   └── [ ] 多法域展開
+│           └── Canister/OU の地理的分散
+│
+└── Inception = Capital × Creativity
+    │
+    │   Owner の役割:
+    │     Capital: 初期投資 + 再投資判断
+    │     Creativity: 方向性 + 語彙注入
+    │
+    ├── [x] Inception Layer 型定義
+    └── [ ] Inception 品質評価メトリクス
+            └── 語彙の明確性スコア
+```
+
+**詳細**: [economics/macro.md](./economics/macro.md)
+
+## 経済ドキュメント参照
+
+| ドキュメント | 内容 |
+|-------------|------|
+| [economics/ouc.md](./economics/ouc.md) | OUC/Indexer Tier 課金・収益モデル |
+| [economics/a-life.md](./economics/a-life.md) | A-Life 自律経済・LLM コスト精査 |
+| [economics/macro.md](./economics/macro.md) | マクロ競争環境・政治経済分析 |
+| [economics/maturity.md](./economics/maturity.md) | A-Life 成熟ステージ (Stage 1-3) |
+| [economics/meme.md](./economics/meme.md) | Meme 経済サイクル・生存者設計 |
