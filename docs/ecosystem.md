@@ -1678,8 +1678,50 @@ Phase 3: ロボット経済 (~1B+)
 | 1 | Status state machine (ECON-006-008) | [x] 完了 (Status.idr, 10 tests) |
 | 2 | 4 Tier + 自動管理 + Catch-up (即時) | [x] 完了 (CatchUpSync.idr, RecoveryOrchestrator.idr, 20 tests) |
 | 3 | バッチポーリング最適化 | [x] 完了 (BatchOptimizer.idr, 10 tests) |
-| 4 | Dashboard UI | [ ] |
+| 4 | Dashboard UI | [~] 進行中 |
 | 5 | OUC 統合 | [ ] |
+
+### Dashboard UI 課題解決ツリー (idris2-ouc-ui)
+
+```
+Dashboard UI [~] 進行中
+│
+├── [x] 4.1 Model/View/Update 骨格 (2025/01/15)
+│       ├── [x] 型定義: Auditor, OU, Proposal, Event
+│       ├── [x] 型定義: Tier, Subscription, Treasury, UpgradeEvent
+│       ├── [x] View: 全タブ (Auditors/OUs/Proposals/Events/Economics/Treasury)
+│       ├── [x] Update: 全Msg handlers
+│       └── [x] SPEC-Test Parity: 29 specs, 54 tests, 84% coverage
+│
+├── [ ] 4.2 ICP Asset Canister Hosting
+│       ├── [ ] dfx.json 設定 (asset canister)
+│       ├── [ ] pack build → dist/ 出力
+│       └── [ ] dfx deploy --network ic
+│
+├── [ ] 4.3 Internet Identity 認証
+│       ├── [ ] @dfinity/auth-client 導入
+│       ├── [ ] II ログイン/ログアウト UI
+│       ├── [ ] Principal 取得・表示
+│       └── [ ] セッション管理
+│
+├── [ ] 4.4 OUC Canister Query
+│       ├── [ ] @dfinity/agent Candid 連携
+│       ├── [ ] /api/auditors Query 実装
+│       ├── [ ] /api/ous Query 実装
+│       ├── [ ] /api/proposals Query 実装
+│       ├── [ ] /api/events Query 実装
+│       └── [ ] JSON → Idris2型 パーサー
+│
+├── [ ] 4.5 Economics/Treasury 統合
+│       ├── [ ] Subscription 状態 Query
+│       ├── [ ] Treasury 残高 Query
+│       └── [ ] Tier 昇降 UI
+│
+└── [ ] 4.6 UpgradeEvent リアルタイム監視
+        ├── [ ] UpgradeProposed/Approved/Rejected/Executed 表示
+        ├── [ ] Polling または WebSocket
+        └── [ ] 通知 UI
+```
 
 **E2E テスト詳細**: [docs/e2e/README.md](./e2e/README.md)
 
