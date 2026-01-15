@@ -1693,10 +1693,10 @@ Dashboard UI [~] 進行中
 │       ├── [x] Update: 全Msg handlers
 │       └── [x] SPEC-Test Parity: 29 specs, 54 tests, 84% coverage
 │
-├── [ ] 4.2 ICP Asset Canister Hosting
-│       ├── [ ] dfx.json 設定 (asset canister)
-│       ├── [ ] pack build → dist/ 出力
-│       └── [ ] dfx deploy --network ic
+├── [x] 4.2 ICP Asset Canister Hosting (2025/01/15)
+│       ├── [x] dfx.json 設定 (asset canister)
+│       ├── [x] pack build → dist/ 出力 (npm run build)
+│       └── [x] dfx deploy --network local 動作確認
 │
 ├── [ ] 4.3 Internet Identity 認証
 │       ├── [ ] @dfinity/auth-client 導入
