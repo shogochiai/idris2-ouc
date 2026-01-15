@@ -1678,8 +1678,8 @@ Phase 3: ロボット経済 (~1B+)
 | 1 | Status state machine (ECON-006-008) | [x] 完了 (Status.idr, 10 tests) |
 | 2 | 4 Tier + 自動管理 + Catch-up (即時) | [x] 完了 (CatchUpSync.idr, RecoveryOrchestrator.idr, 20 tests) |
 | 3 | バッチポーリング最適化 | [x] 完了 (BatchOptimizer.idr, 10 tests) |
-| 4 | Dashboard UI | [~] 進行中 |
-| 5 | OUC 統合 | [ ] |
+| 4 | Dashboard UI | [x] 完了 (4.1-4.6) |
+| 5 | OUC Integration | [~] 進行中 (5.1, 5.3.1 完了) |
 
 ### Dashboard UI 課題解決ツリー (idris2-ouc-ui)
 
@@ -1724,22 +1724,50 @@ Dashboard UI [~] 進行中
 │       ├── [x] Principal 取得・表示 (truncated badge)
 │       └── [x] AuthState type + 7 new specs/tests
 │
-├── [ ] 4.4 Indexer 拡張 (OUC Sync追加) ← idris2-icp-indexer
-│       ├── [ ] OUC Canister polling (Canister間呼出)
-│       ├── [ ] Auditors 同期・保存
-│       ├── [ ] Subscription/Treasury 同期・保存
-│       └── [ ] 統合Query API (/auditors, /subscription, /treasury)
+├── [x] 4.4 Indexer 拡張 (OUC Sync追加) ← idris2-icp-indexer (2025/01/15)
+│       ├── [x] OucSync.idr type definitions
+│       ├── [x] SyncState state machine
+│       ├── [x] Tier-based sync interval
+│       └── [x] 6 SPEC tests
 │
-├── [ ] 4.5 Dashboard → Indexer Query ← idris2-ouc-ui
-│       ├── [ ] @dfinity/agent → Indexer 連携
-│       ├── [ ] 全エンドポイント Query 実装
-│       ├── [ ] JSON → Idris2型 パーサー
-│       └── [ ] Tier 昇降 UI (Indexer経由でOUCに書込)
+├── [x] 4.5 Tier UI (idris2-ouc-ui) (2025/01/15)
+│       ├── [x] Tier selection grid (Archive/Economy/Standard/RealTime)
+│       ├── [x] changeTier() API endpoint
+│       ├── [x] RequestTierChange/TierChangeSuccess/TierChangeFailure Msgs
+│       └── [x] 4 tests
 │
-└── [ ] 4.6 リアルタイム監視
-        ├── [ ] Timer-based Indexer polling
-        ├── [ ] UpgradeEvent 差分検出
-        └── [ ] 通知 UI
+├── [x] 4.6 Real-time Monitoring (idris2-ouc-ui) (2025/01/15)
+│       ├── [x] Polling toggle (Live button)
+│       ├── [x] Notification panel + dismiss/clear
+│       ├── [x] Event diff detection (detectNewEvents)
+│       └── [x] 6 tests
+│
+└── [ ] 5. OUC Integration
+        │
+        ├── [x] 5.1 Indexer → OUC Inter-Canister Call (2025/01/15)
+        │       ├── [x] 5.1.1 Inter-Canister Call FFI (ouc_call.c)
+        │       ├── [x] 5.1.2 OUC Query Implementation (OucSync/FFI.idr)
+        │       └── [x] 5.1.3 Sync Timer (Tier-based intervals)
+        │
+        ├── [ ] 5.2 Dashboard → OUC Write Operations
+        │       ├── [ ] 5.2.1 Indexer Write Endpoints
+        │       ├── [ ] 5.2.2 Auditor Management
+        │       └── [ ] 5.2.3 OU Registration
+        │
+        ├── [~] 5.3 OUC Core Candid API (idris2-ouc)
+        │       ├── [x] 5.3.1 Candid Interface (can.did + Interface.idr)
+        │       ├── [ ] 5.3.2 State Management (Stable Memory)
+        │       └── [ ] 5.3.3 Access Control
+        │
+        ├── [ ] 5.4 E2E Testing
+        │       ├── [ ] 5.4.1 Local dfx Environment
+        │       ├── [ ] 5.4.2 Integration Tests
+        │       └── [ ] 5.4.3 Failure Scenarios
+        │
+        └── [ ] 5.5 Production Deployment
+                ├── [ ] 5.5.1 Canister Creation
+                ├── [ ] 5.5.2 Configuration
+                └── [ ] 5.5.3 Monitoring
 ```
 
 **E2E テスト詳細**: [docs/e2e/README.md](./e2e/README.md)
