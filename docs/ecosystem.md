@@ -1698,11 +1698,11 @@ Dashboard UI [~] 進行中
 │       ├── [x] pack build → dist/ 出力 (npm run build)
 │       └── [x] dfx deploy --network local 動作確認
 │
-├── [ ] 4.3 Internet Identity 認証
-│       ├── [ ] @dfinity/auth-client 導入
-│       ├── [ ] II ログイン/ログアウト UI
-│       ├── [ ] Principal 取得・表示
-│       └── [ ] セッション管理
+├── [x] 4.3 Internet Identity 認証 (2025/01/15)
+│       ├── [x] @dfinity/auth-client 導入 (esbuild bundled)
+│       ├── [x] II ログイン/ログアウト UI (View.idr)
+│       ├── [x] Principal 取得・表示 (truncated badge)
+│       └── [x] AuthState type + 7 new specs/tests
 │
 ├── [ ] 4.4 OUC Canister Query
 │       ├── [ ] @dfinity/agent Candid 連携
