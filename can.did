@@ -1,9 +1,45 @@
-// OptimisticUpgraderCanister (OUC) - Minimal Candid Interface
-// This is a simplified interface for MVP deployment.
-// Full FRC-compliant types will be added when Idris->Candid encoding is implemented.
+// OptimisticUpgraderCanister (OUC) - Candid Interface
+// MVP: Returns JSON text for complex types
+// Full Candid encoding will be added in Phase 3
+
+// =============================================================================
+// Indexer Integration Types (5.3.1)
+// =============================================================================
+type Tier = variant { Archive; Economy; Standard; RealTime };
+
+type Subscription = record {
+    currentTier: Tier;
+    expiryDate: nat;
+    autoRenew: bool;
+};
+
+type Treasury = record {
+    ckEthBalance: nat;
+    icpBalance: nat;
+    cyclesBalance: nat;
+};
+
+type AuditorInfo = record {
+    auditorId: text;
+    principal: text;
+    name: text;
+    assignedOUs: vec text;
+    status: text;
+    reputation: nat;
+};
 
 service : {
-    // Query Methods
+    // ==========================================================================
+    // Indexer Query Methods (5.3.1)
+    // Called by ICP Indexer for OUC sync
+    // ==========================================================================
+    getAuditors: () -> (vec AuditorInfo) query;
+    getSubscription: () -> (opt Subscription) query;
+    getTreasury: () -> (opt Treasury) query;
+
+    // ==========================================================================
+    // Original Query Methods
+    // ==========================================================================
     getProposal: (nat) -> (text) query;
     getProposalsByChain: (nat) -> (text) query;
     getProposalsByStatus: (text) -> (text) query;
@@ -42,4 +78,11 @@ service : {
     getProtocolBalance: (text) -> (nat) query; // protocol_id -> balance (cycles)
     getProtocolTier: (text) -> (nat) query;    // protocol_id -> tier (0-3)
     getProtocolCount: () -> (nat) query;       // total registered protocols
+
+    // ==========================================================================
+    // Indexer Update Methods (5.3.1)
+    // Called from Dashboard via Indexer for tier management
+    // ==========================================================================
+    setTier: (Tier) -> (opt Subscription);
+    setAutoRenew: (bool) -> (opt Subscription);
 }
