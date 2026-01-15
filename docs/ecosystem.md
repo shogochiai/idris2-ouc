@@ -1683,6 +1683,24 @@ Phase 3: ロボット経済 (~1B+)
 
 ### Dashboard UI 課題解決ツリー (idris2-ouc-ui)
 
+**⚠️ データソース設計 (重要)**
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Dashboard UI                                                 │
+│   │                                                          │
+│   ├── ICP Indexer (idris2-icp-indexer) ← EVM側データ全般    │
+│   │     • OU Status (block height, sync状態)                │
+│   │     • Proposals (OU.proposeUpgrade events)              │
+│   │     • Events (全EVMイベント)                            │
+│   │     • UpgradeEvents (Proposed/Approved/Rejected/Executed)│
+│   │                                                          │
+│   └── OUC Canister (idris2-ouc) ← ICP側状態のみ             │
+│         • Auditors (登録・割当)                              │
+│         • Subscription/Treasury (課金・残高)                 │
+└─────────────────────────────────────────────────────────────┘
+※ OUはEVM側なので、OUC直接Queryではなく Indexer経由で取得
+```
+
 ```
 Dashboard UI [~] 進行中
 │
@@ -1704,22 +1722,22 @@ Dashboard UI [~] 進行中
 │       ├── [x] Principal 取得・表示 (truncated badge)
 │       └── [x] AuthState type + 7 new specs/tests
 │
-├── [ ] 4.4 OUC Canister Query
-│       ├── [ ] @dfinity/agent Candid 連携
-│       ├── [ ] /api/auditors Query 実装
-│       ├── [ ] /api/ous Query 実装
-│       ├── [ ] /api/proposals Query 実装
-│       ├── [ ] /api/events Query 実装
+├── [ ] 4.4 Indexer Query (EVM側データ)
+│       ├── [ ] @dfinity/agent → ICP Indexer 連携
+│       ├── [ ] /events Query (OU events filtered)
+│       ├── [ ] OU Status 取得 (block height → sync状態計算)
+│       ├── [ ] Proposals 取得 (topic0=UpgradeProposed)
 │       └── [ ] JSON → Idris2型 パーサー
 │
-├── [ ] 4.5 Economics/Treasury 統合
-│       ├── [ ] Subscription 状態 Query
-│       ├── [ ] Treasury 残高 Query
+├── [ ] 4.5 OUC Query (ICP側データ)
+│       ├── [ ] @dfinity/agent → OUC Canister 連携
+│       ├── [ ] Auditors Query
+│       ├── [ ] Subscription/Treasury Query
 │       └── [ ] Tier 昇降 UI
 │
 └── [ ] 4.6 UpgradeEvent リアルタイム監視
-        ├── [ ] UpgradeProposed/Approved/Rejected/Executed 表示
-        ├── [ ] Polling または WebSocket
+        ├── [ ] Indexer polling (UpgradeProposed/Approved/etc)
+        ├── [ ] Timer-based refresh
         └── [ ] 通知 UI
 ```
 
