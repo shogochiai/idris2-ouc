@@ -1679,7 +1679,7 @@ Phase 3: ロボット経済 (~1B+)
 | 2 | 4 Tier + 自動管理 + Catch-up (即時) | [x] 完了 (CatchUpSync.idr, RecoveryOrchestrator.idr, 20 tests) |
 | 3 | バッチポーリング最適化 | [x] 完了 (BatchOptimizer.idr, 10 tests) |
 | 4 | Dashboard UI | [x] 完了 (4.1-4.6) |
-| 5 | OUC Integration | [~] 進行中 (5.1, 5.3.1 完了) |
+| 5 | OUC Integration | [~] In Progress (5.1, 5.2, 5.3 done) |
 
 ### Dashboard UI 課題解決ツリー (idris2-ouc-ui)
 
@@ -1749,15 +1749,15 @@ Dashboard UI [~] 進行中
         │       ├── [x] 5.1.2 OUC Query Implementation (OucSync/FFI.idr)
         │       └── [x] 5.1.3 Sync Timer (Tier-based intervals)
         │
-        ├── [ ] 5.2 Dashboard → OUC Write Operations
-        │       ├── [ ] 5.2.1 Indexer Write Endpoints
-        │       ├── [ ] 5.2.2 Auditor Management
-        │       └── [ ] 5.2.3 OU Registration
+        ├── [x] 5.2 Dashboard → OUC Write Operations (2025/01/15)
+        │       ├── [x] 5.2.1 Indexer Write Endpoints (Mutation.idr)
+        │       ├── [x] 5.2.2 Auditor Management (register, assign, remove)
+        │       └── [x] 5.2.3 OU Registration (register, update chain)
         │
-        ├── [~] 5.3 OUC Core Candid API (idris2-ouc)
+        ├── [x] 5.3 OUC Core Candid API (idris2-ouc) (2025/01/15)
         │       ├── [x] 5.3.1 Candid Interface (can.did + Interface.idr)
-        │       ├── [ ] 5.3.2 State Management (Stable Memory)
-        │       └── [ ] 5.3.3 Access Control
+        │       ├── [x] 5.3.2 State Management (StableMemory.idr)
+        │       └── [x] 5.3.3 Access Control (AccessControl.idr)
         │
         ├── [ ] 5.4 E2E Testing
         │       ├── [ ] 5.4.1 Local dfx Environment
