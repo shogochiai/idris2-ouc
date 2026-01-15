@@ -1760,14 +1760,106 @@ Dashboard UI [~] 進行中
         │       └── [x] 5.3.3 Access Control (AccessControl.idr)
         │
         ├── [ ] 5.4 E2E Testing
+        │       │
         │       ├── [ ] 5.4.1 Local dfx Environment
+        │       │       ├── [ ] 5.4.1.1 dfx.json multi-canister config
+        │       │       │       ├── ouc canister (Idris2 → WASM)
+        │       │       │       ├── indexer canister (Idris2 → WASM)
+        │       │       │       └── frontend canister (asset)
+        │       │       ├── [ ] 5.4.1.2 Local replica setup
+        │       │       │       ├── dfx start --clean
+        │       │       │       ├── Identity configuration
+        │       │       │       └── Cycles wallet setup
+        │       │       ├── [ ] 5.4.1.3 Deploy scripts
+        │       │       │       ├── scripts/deploy-local.sh
+        │       │       │       ├── Canister ID extraction
+        │       │       │       └── Environment variable injection
+        │       │       └── [ ] 5.4.1.4 Test data seeding
+        │       │               ├── scripts/seed-test-data.sh
+        │       │               ├── Mock auditors (3 principals)
+        │       │               ├── Mock OUs (5 addresses, 2 chains)
+        │       │               └── Mock proposals (10 in various states)
+        │       │
         │       ├── [ ] 5.4.2 Integration Tests
-        │       └── [ ] 5.4.3 Failure Scenarios
+        │       │       ├── [ ] 5.4.2.1 OUC ↔ Indexer Sync
+        │       │       │       ├── getAuditors() round-trip
+        │       │       │       ├── getSubscription() round-trip
+        │       │       │       ├── getTreasury() round-trip
+        │       │       │       └── Sync interval verification (Tier-based)
+        │       │       ├── [ ] 5.4.2.2 Auditor CRUD Flow
+        │       │       │       ├── Register auditor → Indexer reflects
+        │       │       │       ├── Assign OU → Indexer reflects
+        │       │       │       ├── Remove auditor → Indexer reflects
+        │       │       │       └── Permission denied (non-controller)
+        │       │       ├── [ ] 5.4.2.3 Subscription Management
+        │       │       │       ├── setTier(Economy) → OUC updates
+        │       │       │       ├── setTier(RealTime) → Sync interval changes
+        │       │       │       ├── setAutoRenew(true) → Persists
+        │       │       │       └── Unauthorized caller rejected
+        │       │       ├── [ ] 5.4.2.4 Proposal Lifecycle
+        │       │       │       ├── Create → Pending state
+        │       │       │       ├── Assign auditor → UnderReview
+        │       │       │       ├── Approve → Approved state
+        │       │       │       ├── Execute → Executed (terminal)
+        │       │       │       └── State transitions indexed correctly
+        │       │       └── [ ] 5.4.2.5 Dashboard Query
+        │       │               ├── /auditors returns seeded data
+        │       │               ├── /subscription returns tier info
+        │       │               ├── /treasury returns balances
+        │       │               └── /ouc/status shows sync state
+        │       │
+        │       ├── [ ] 5.4.3 Failure Scenarios
+        │       │       ├── [ ] 5.4.3.1 OUC Unreachable
+        │       │       │       ├── Stop OUC canister
+        │       │       │       ├── Indexer fallback behavior
+        │       │       │       ├── OucFailed state recorded
+        │       │       │       └── Recovery on OUC restart
+        │       │       ├── [ ] 5.4.3.2 Rate Limiting
+        │       │       │       ├── Burst 100 requests
+        │       │       │       ├── Verify throttling response
+        │       │       │       └── Queue backoff behavior
+        │       │       ├── [ ] 5.4.3.3 Cycles Exhaustion
+        │       │       │       ├── Drain canister cycles
+        │       │       │       ├── Verify graceful degradation
+        │       │       │       └── Top-up recovery
+        │       │       ├── [ ] 5.4.3.4 Invalid Principal
+        │       │       │       ├── Anonymous call to update method
+        │       │       │       ├── Non-auditor submitting review
+        │       │       │       └── Error message verification
+        │       │       └── [ ] 5.4.3.5 State Corruption Recovery
+        │       │               ├── Force invalid state in stable memory
+        │       │               ├── post_upgrade migration kicks in
+        │       │               └── Verify data integrity after recovery
+        │       │
+        │       └── [ ] 5.4.4 Performance Benchmarks
+        │               ├── [ ] 5.4.4.1 Query Latency
+        │               │       ├── getAuditors() < 100ms
+        │               │       ├── getSubscription() < 50ms
+        │               │       └── Bulk query (100 events) < 500ms
+        │               ├── [ ] 5.4.4.2 Update Throughput
+        │               │       ├── setTier() < 200ms
+        │               │       ├── registerAuditor() < 300ms
+        │               │       └── Concurrent updates (10 parallel)
+        │               └── [ ] 5.4.4.3 Sync Performance
+        │                       ├── Full sync time measurement
+        │                       ├── Incremental sync efficiency
+        │                       └── Memory usage during sync
         │
         └── [ ] 5.5 Production Deployment
                 ├── [ ] 5.5.1 Canister Creation
+                │       ├── dfx canister create --network ic
+                │       ├── Canister ID registration
+                │       └── Initial cycles allocation (10T)
                 ├── [ ] 5.5.2 Configuration
+                │       ├── OUC_CANISTER_ID in Indexer
+                │       ├── INDEXER_CANISTER_ID in Frontend
+                │       ├── RPC endpoints (Alchemy/Infura)
+                │       └── Initial controller principal
                 └── [ ] 5.5.3 Monitoring
+                        ├── Cycles balance alerts (< 1T threshold)
+                        ├── Sync latency dashboard
+                        ├── Error rate tracking
+                        └── Canister metrics (memory, instructions)
 ```
 
 **E2E テスト詳細**: [docs/e2e/README.md](./e2e/README.md)
