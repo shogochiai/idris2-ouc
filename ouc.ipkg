@@ -66,7 +66,10 @@ modules = Util.StringHex
         , Economics.Tests.FeeToCyclesE2E
         -- Storage Layer
         , OUC.Storages.State
+        , OUC.Storages.StableMemory
         , OUC.Storages.SourceOfTruth
+        -- Access Control
+        , OUC.AccessControl
         -- Tests
         , OUC.Tests.CoreTests
         , Integration.Tests.AllTests
