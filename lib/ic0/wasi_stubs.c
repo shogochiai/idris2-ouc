@@ -77,3 +77,16 @@ void proc_exit(int32_t code) {
     /* IC will trap if we try to call an undefined function */
     /* For now, just return - the IC handles process lifecycle */
 }
+
+/*
+ * Idris2 RefC Runtime Stubs
+ * These are needed because the RefC backend generates calls to these functions
+ * for I/O operations, but they're not available on IC.
+ */
+
+/* idris2_putStr - print a string (no-op on IC) */
+void idris2_putStr(char *s) {
+    (void)s;
+    /* On IC, we could call ic0_debug_print here for debugging,
+     * but for production we just ignore the output */
+}

@@ -174,3 +174,63 @@ RefC ランタイムは trampoline によって:
 - GC との連携
 
 を行う。`__mainExpression_0()` 直接呼び出しではこれらが動作しない。
+
+## ic-wasm Profiling (Coverage Testing)
+
+### Instrumentation & Deploy
+
+```bash
+# 1. Build (Makefile経由)
+make wasm
+
+# 2. Instrument with stable memory layout
+# Pages 0-9: canister data, Pages 10-25: profiling
+ic-wasm build/ouc_stubbed.wasm -o build/ouc_instrumented.wasm \
+  instrument --start-page 10 --page-limit 16
+
+# 3. Deploy
+dfx canister install ouc --wasm build/ouc_instrumented.wasm --mode reinstall
+```
+
+### Stable Memory Pre-allocation
+
+idris2-wasm の WasmBuilder.idr が canister_init で 26ページ事前確保：
+
+```c
+void canister_init(void) {
+    ic0_stable64_grow(26);  // 0-9 for data, 10-25 for profiling
+    ensure_idris2_init();
+}
+```
+
+### Get Profiling
+
+```bash
+# 重要: __toggle_tracing は呼ばない (トレースが無効化される)
+dfx canister call ouc __toggle_entry '()'
+dfx canister call ouc runTests '()'
+dfx canister call ouc '__get_profiling' '(0 : nat32)'
+```
+
+### WASM関数インデックス↔名前
+
+```bash
+wasm-objdump -x build/ouc_stubbed.wasm | grep -E "^ - func\["
+# 出力例:
+# func[14] <Main_dispatchCommand>
+# func[36] <Main_doDonateToProtocol>
+```
+
+### High Impact Targets (静的解析)
+
+未カバー＋重要な関数を特定：
+```
+⚠️ Main.doDonateToProtocol [donate]
+⚠️ Main.doRegisterAuditor [register]
+⚠️ Main.doSubmitProposal [submit]
+```
+
+### Entry Mode の制限
+
+`__toggle_entry` は **エクスポート関数** (canister_update_*, canister_query_*) のみトレース。
+内部Idris関数は記録されない。Full tracing (`__toggle_tracing`) は現状空を返す。

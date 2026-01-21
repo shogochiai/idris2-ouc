@@ -10,7 +10,8 @@ IC0_SUPPORT="$PROJECT_DIR/lib/ic0"
 
 # Idris2 environment
 export PATH="$HOME/.local/bin:$HOME/.pack/bin:$PATH"
-export IDRIS2_PREFIX="${IDRIS2_PREFIX:-$HOME/.idris2}"
+# Note: IDRIS2_PREFIX is determined by idris2 installation (e.g., Homebrew)
+# Do not override unless you know your Idris2 installation location
 
 # Use emsdk if available
 if [ -f "$HOME/emsdk/emsdk_env.sh" ]; then
