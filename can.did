@@ -21,7 +21,7 @@ type Treasury = record {
 
 type AuditorInfo = record {
     auditorId: text;
-    principal: text;
+    principalId: text;
     name: text;
     assignedOUs: vec text;
     status: text;
