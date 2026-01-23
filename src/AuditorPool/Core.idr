@@ -10,7 +10,9 @@ module AuditorPool.Core
 
 import FRMonad.Core
 import OUC.Functions.Core
+import OUC.Types.Validated
 import Data.List
+import Data.List1
 import Data.Nat
 
 %default total
@@ -32,6 +34,19 @@ safeIndex : Nat -> List a -> Maybe a
 safeIndex _ [] = Nothing
 safeIndex 0 (x :: _) = Just x
 safeIndex (S k) (_ :: xs) = safeIndex k xs
+
+-- Helper: safe index for NonEmpty (always succeeds with modulo)
+safeIndexNonEmpty : Nat -> NonEmpty a -> a
+safeIndexNonEmpty n ne =
+  let lst = fromNonEmpty ne
+      idx = safeMod n (length lst)
+  in case safeIndex idx lst of
+    Just x => x
+    Nothing => head ne  -- fallback (shouldn't happen)
+
+-- Helper: sort NonEmpty preserving non-emptiness
+sortNonEmptyByField : (a -> a -> Ordering) -> NonEmpty a -> NonEmpty a
+sortNonEmptyByField cmp ne = sortNonEmptyBy cmp ne
 
 -- =============================================================================
 -- Auditor Pool State
@@ -88,7 +103,7 @@ Show SelectionCriteria where
 public export
 registerAuditor :
   List Auditor ->
-  ICPrincipal ->
+  ValidatedPrincipal ->
   Nat ->               -- stake amount
   Nat ->               -- currentTime
   PoolConfig ->
@@ -98,7 +113,7 @@ registerAuditor auditors principal stakeAmount now config =
     then fail Update "registerAuditor" "Insufficient stake"
               (Unauthorized ("Stake " ++ show stakeAmount ++ " < " ++ show config.minStakeAmount))
     else
-      let aid = MkAuditorId (MkICPrincipal principal.text)
+      let aid = MkAuditorId principal
           existing = find (\a => a.id == aid) auditors
       in case existing of
         Just _ => fail Update "registerAuditor" "Already registered"
@@ -115,6 +130,7 @@ getActiveAuditors auditors config =
   filter (\a => a.status == Active && a.reputation >= config.minReputationScore) auditors
 
 ||| Select auditor for proposal assignment
+||| Uses NonEmpty internally to eliminate impossible empty-list cases after initial check
 public export
 selectAuditor :
   List Auditor ->
@@ -123,32 +139,26 @@ selectAuditor :
   FR AuditorId
 selectAuditor auditors criteria config =
   let active = getActiveAuditors auditors config
-  in case active of
-    [] => fail Query "selectAuditor" "No auditors available"
-               (NotFound "No active auditors meeting criteria")
-    (a :: rest) => case criteria of
-      ByReputation =>
-        let sorted = sortBy (\x, y => compare y.reputation x.reputation) active
-        in case sorted of
-          [] => fail Query "selectAuditor" "No auditors" (Internal "Sort failed")
-          (best :: _) => ok Query "selectAuditor" ("Selected " ++ show best.id) best.id
-      ByAvailability =>
-        let sorted = sortBy (\x, y => compare x.totalReviews y.totalReviews) active
-        in case sorted of
-          [] => fail Query "selectAuditor" "No auditors" (Internal "Sort failed")
-          (best :: _) => ok Query "selectAuditor" ("Selected " ++ show best.id) best.id
-      Random seed =>
-        let idx = safeMod seed (length active)
-        in case safeIndex idx active of
-          Just selected => ok Query "selectAuditor" ("Selected " ++ show selected.id) selected.id
-          Nothing => ok Query "selectAuditor" ("Selected " ++ show a.id) a.id
-      Weighted =>
-        -- Simplified: just use highest weighted score
-        let weighted = map (\a => (a, a.reputation * a.stakedAmount)) active
-            sorted = sortBy (\(_, w1), (_, w2) => compare w2 w1) weighted
-        in case sorted of
-          [] => fail Query "selectAuditor" "No auditors" (Internal "Weighted sort failed")
-          ((best, _) :: _) => ok Query "selectAuditor" ("Selected " ++ show best.id) best.id
+  in case toNonEmpty active of
+    Nothing => fail Query "selectAuditor" "No auditors available"
+                    (NotFound "No active auditors meeting criteria")
+    Just activeNE =>
+      -- NonEmpty guarantees: sorting preserves non-emptiness, head always succeeds
+      let selected = selectFromNonEmpty activeNE criteria
+      in ok Query "selectAuditor" ("Selected " ++ show selected.id) selected.id
+  where
+    ||| Internal: select from non-empty list (no failure possible)
+    selectFromNonEmpty : NonEmpty Auditor -> SelectionCriteria -> Auditor
+    selectFromNonEmpty ne ByReputation =
+      head $ sortNonEmptyByField (\x, y => compare y.reputation x.reputation) ne
+    selectFromNonEmpty ne ByAvailability =
+      head $ sortNonEmptyByField (\x, y => compare x.totalReviews y.totalReviews) ne
+    selectFromNonEmpty ne (Random seed) =
+      safeIndexNonEmpty seed ne
+    selectFromNonEmpty ne Weighted =
+      let weighted = map (\a => (a, a.reputation * a.stakedAmount)) ne
+          sorted = sortNonEmptyByField (\(_, w1), (_, w2) => compare w2 w1) weighted
+      in fst (head sorted)
 
 ||| Update auditor reputation after review
 public export

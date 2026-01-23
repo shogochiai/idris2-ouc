@@ -10,6 +10,7 @@ module Rewards.Core
 
 import FRMonad.Core
 import OUC.Functions.Core
+import OUC.Types.Validated
 import Data.List
 import Data.Nat
 
@@ -46,7 +47,7 @@ public export
 record FeeCollection where
   constructor MkFeeCollection
   proposalId  : ProposalId
-  payer       : ICPrincipal
+  payer       : ValidatedPrincipal
   amount      : TokenAmount
   collectedAt : Nat
 
@@ -143,7 +144,7 @@ public export
 collectFee :
   RewardsState ->
   ProposalId ->
-  ICPrincipal ->
+  ValidatedPrincipal ->
   TokenAmount ->
   Nat ->               -- currentTime
   FR RewardsState

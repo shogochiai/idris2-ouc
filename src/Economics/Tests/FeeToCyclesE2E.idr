@@ -44,7 +44,7 @@ runOne t = do
 -- E2E Test: Fee Deposit → Treasury
 -- =============================================================================
 
-||| E2E_001: ckETH deposit updates Treasury correctly
+||| REQ_ECON_E2E_001: ckETH deposit updates Treasury correctly
 test_ckEthDeposit_updatesTreasury : TestResult
 test_ckEthDeposit_updatesTreasury =
   let -- Initial state
@@ -64,7 +64,7 @@ test_ckEthDeposit_updatesTreasury =
             && result.toOperating == expectedToOps
             && result.toProfit == expectedToProfit
             && newTreasury.profit.undistributed == expectedToProfit
-  in test "E2E_001" "ckETH deposit splits correctly to Treasury pools"
+  in test "REQ_ECON_E2E_001" "ckETH deposit splits correctly to Treasury pools"
           passed
           ("ckEth=" ++ show newTreasury.ckEthBalance
            ++ ", toOps=" ++ show result.toOperating
@@ -74,7 +74,7 @@ test_ckEthDeposit_updatesTreasury =
 -- E2E Test: Treasury → Cycles Reserve
 -- =============================================================================
 
-||| E2E_002: Adding cycles to operating reserve
+||| REQ_ECON_E2E_002: Adding cycles to operating reserve
 test_addCycles_updatesOperating : TestResult
 test_addCycles_updatesOperating =
   let treasury = initialTreasury
@@ -84,11 +84,11 @@ test_addCycles_updatesOperating =
       newTreasury = addCycles treasury cyclesToAdd now
 
       passed = newTreasury.operating.availableCycles == cyclesToAdd
-  in test "E2E_002" "Adding cycles updates operating reserve"
+  in test "REQ_ECON_E2E_002" "Adding cycles updates operating reserve"
           passed
           ("availableCycles=" ++ show newTreasury.operating.availableCycles)
 
-||| E2E_003: Reserve cycles for operation
+||| REQ_ECON_E2E_003: Reserve cycles for operation
 test_reserveCycles_success : TestResult
 test_reserveCycles_success =
   let treasury = addCycles initialTreasury 10000 1000  -- 10k cycles
@@ -100,13 +100,13 @@ test_reserveCycles_success =
         CyclesOk newT => newT.operating.availableCycles == (10000 - reserveAmount)
                       && newT.operating.reservedCycles == reserveAmount
         InsufficientCycles _ _ => False
-  in test "E2E_003" "Reserve cycles for operation succeeds"
+  in test "REQ_ECON_E2E_003" "Reserve cycles for operation succeeds"
           passed
           (case result of
              CyclesOk t => "reserved=" ++ show t.operating.reservedCycles
              InsufficientCycles r a => "insufficient: " ++ show r ++ " > " ++ show a)
 
-||| E2E_004: Reserve cycles fails when insufficient
+||| REQ_ECON_E2E_004: Reserve cycles fails when insufficient
 test_reserveCycles_insufficient : TestResult
 test_reserveCycles_insufficient =
   let treasury = addCycles initialTreasury 100 1000  -- Only 100 cycles
@@ -118,7 +118,7 @@ test_reserveCycles_insufficient =
         CyclesOk _ => False
         InsufficientCycles requested available =>
           requested == reserveAmount && available == 100
-  in test "E2E_004" "Reserve cycles fails when insufficient"
+  in test "REQ_ECON_E2E_004" "Reserve cycles fails when insufficient"
           passed
           "Correctly rejected oversized request"
 
@@ -126,7 +126,7 @@ test_reserveCycles_insufficient =
 -- E2E Test: Cycles Minting Flow
 -- =============================================================================
 
-||| E2E_005: Create minting request
+||| REQ_ECON_E2E_005: Create minting request
 test_createMintingRequest : TestResult
 test_createMintingRequest =
   let ckEthAmount : Integer = 1000
@@ -143,11 +143,11 @@ test_createMintingRequest =
             && request.expectedIcp == quote.outputAmount
             && request.minIcp == expectedMinIcp
             && case request.state of { MintingPending => True; _ => False }
-  in test "E2E_005" "Create minting request with slippage protection"
+  in test "REQ_ECON_E2E_005" "Create minting request with slippage protection"
           passed
           ("minIcp=" ++ show request.minIcp ++ ", expected=" ++ show request.expectedIcp)
 
-||| E2E_006: Advance minting state machine
+||| REQ_ECON_E2E_006: Advance minting state machine
 test_advanceMintingState : TestResult
 test_advanceMintingState =
   let ckEthAmount : Integer = 1000
@@ -164,11 +164,11 @@ test_advanceMintingState =
       passed = case r5.state of
         MintingCompleted cycles => cycles == 20000
         _ => False
-  in test "E2E_006" "Minting state machine advances correctly"
+  in test "REQ_ECON_E2E_006" "Minting state machine advances correctly"
           passed
           (show r5.state)
 
-||| E2E_007: Calculate cycles from ICP
+||| REQ_ECON_E2E_007: Calculate cycles from ICP
 test_calculateCycles : TestResult
 test_calculateCycles =
   let -- Use small rate for testing: 100 cycles per 1 ICP (100 e8s)
@@ -180,7 +180,7 @@ test_calculateCycles =
       -- 100 * 100 / 100_000_000 = 0 (too small, need to scale)
       -- Let's use more reasonable small values
       passed = True  -- Type check only, actual math needs Integer
-  in test "E2E_007" "Calculate cycles from ICP amount (type check)"
+  in test "REQ_ECON_E2E_007" "Calculate cycles from ICP amount (type check)"
           passed
           ("cycles=" ++ show cycles)
 
@@ -188,7 +188,7 @@ test_calculateCycles =
 -- E2E Test: Minting Registry
 -- =============================================================================
 
-||| E2E_008: Add and find minting request
+||| REQ_ECON_E2E_008: Add and find minting request
 test_mintingRegistry_addFind : TestResult
 test_mintingRegistry_addFind =
   let reg = initialMintingRegistry
@@ -201,11 +201,11 @@ test_mintingRegistry_addFind =
       passed = case found of
         Just r => r.requestId == 1
         Nothing => False
-  in test "E2E_008" "Add and find minting request in registry"
+  in test "REQ_ECON_E2E_008" "Add and find minting request in registry"
           passed
           (case found of { Just _ => "Found"; Nothing => "Not found" })
 
-||| E2E_009: Update request updates totals on completion
+||| REQ_ECON_E2E_009: Update request updates totals on completion
 test_mintingRegistry_updateTotals : TestResult
 test_mintingRegistry_updateTotals =
   let reg = initialMintingRegistry
@@ -218,7 +218,7 @@ test_mintingRegistry_updateTotals =
 
       passed = reg2.totalMinted == 20000
             && reg2.totalConverted == 1000
-  in test "E2E_009" "Registry updates totals on minting completion"
+  in test "REQ_ECON_E2E_009" "Registry updates totals on minting completion"
           passed
           ("minted=" ++ show reg2.totalMinted ++ ", converted=" ++ show reg2.totalConverted)
 
@@ -226,7 +226,7 @@ test_mintingRegistry_updateTotals =
 -- E2E Test: Full Flow Integration
 -- =============================================================================
 
-||| E2E_010: Full fee-to-cycles flow
+||| REQ_ECON_E2E_010: Full fee-to-cycles flow
 test_fullFlow_feeToCycles : TestResult
 test_fullFlow_feeToCycles =
   let -- Step 1: ckETH deposit to Treasury
@@ -251,13 +251,13 @@ test_fullFlow_feeToCycles =
       passed = treasury2.ckEthBalance == ckEthDeposit
             && treasury2.operating.availableCycles == mintedCycles
             && treasury2.profit.undistributed == depositResult.toProfit
-  in test "E2E_010" "Full fee-to-cycles flow"
+  in test "REQ_ECON_E2E_010" "Full fee-to-cycles flow"
           passed
           ("ckEth=" ++ show treasury2.ckEthBalance
            ++ ", cycles=" ++ show treasury2.operating.availableCycles
            ++ ", profit=" ++ show treasury2.profit.undistributed)
 
-||| E2E_011: Profit distribution flow
+||| REQ_ECON_E2E_011: Profit distribution flow
 test_profitDistribution : TestResult
 test_profitDistribution =
   let -- Setup: Treasury with undistributed profit
@@ -285,11 +285,11 @@ test_profitDistribution =
                  [dao, dev, reserve] =>
                    dao.totalReceived == daoExpected && dev.totalReceived == devExpected
                  _ => False
-  in test "E2E_011" "Profit distribution to stakeholders"
+  in test "REQ_ECON_E2E_011" "Profit distribution to stakeholders"
           passed
           ("distributed=" ++ show (distResult.distributed))
 
-||| E2E_012: Treasury refill trigger
+||| REQ_ECON_E2E_012: Treasury refill trigger
 test_treasuryRefillTrigger : TestResult
 test_treasuryRefillTrigger =
   let -- Create treasury with custom low watermark for testing
@@ -306,7 +306,7 @@ test_treasuryRefillTrigger =
 
       -- With default watermarks (1T low, 10T high), 500 cycles is way below
       passed = needsRefillBefore == True && needsRefillAfter == False
-  in test "E2E_012" "Treasury refill trigger works correctly"
+  in test "REQ_ECON_E2E_012" "Treasury refill trigger works correctly"
           passed
           ("needsRefill=" ++ show needsRefillBefore ++ ", amount=" ++ show refillAmt)
 

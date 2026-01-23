@@ -10,6 +10,7 @@ module Proposals.Core
 
 import FRMonad.Core
 import OUC.Functions.Core
+import OUC.Types.Validated
 import Data.List
 
 %default total
@@ -76,8 +77,8 @@ public export
 record ChainConfig where
   constructor MkChainConfig
   chainId   : ChainId
-  oufAddr   : EvmAddress    -- OptimisticUpgraderFactory
-  oucAddr   : EvmAddress    -- OUC's address on this chain
+  oufAddr   : ValidatedEvmAddress  -- OptimisticUpgraderFactory
+  oucAddr   : ValidatedEvmAddress  -- OUC's address on this chain
   rpcUrl    : String
   isActive  : Bool
 
@@ -88,22 +89,20 @@ record ChainConfig where
 ||| Validate a proposal against chain configuration
 public export
 validateProposal :
-  UpgradeProposal ->
+  Proposal ->
   List ChainConfig ->
   Nat ->                     -- currentTime
   FR ValidationResult
 validateProposal proposal configs now =
-  case find (\c => c.chainId == proposal.chainId) configs of
+  let propChainId = proposal.chainId
+  in case find (\c => c.chainId.value == propChainId) configs of
     Nothing => ok Query "validateProposal" "Chain not configured"
-               (InvalidChain ("Unknown chain: " ++ show proposal.chainId))
+               (InvalidChain ("Unknown chain: " ++ show propChainId))
     Just config =>
       if not config.isActive
         then ok Query "validateProposal" "Chain inactive"
              (InvalidChain "Chain is not active")
-        else if now > proposal.expiresAt
-          then ok Query "validateProposal" "Proposal expired"
-               ExpiredProposal
-          else ok Query "validateProposal" "Proposal valid" Valid
+        else ok Query "validateProposal" "Proposal valid" Valid
 
 ||| Receive proposal from LazyEvmLifecycle
 ||| This is the entry point that establishes "upgrade推奨 ≡ proposal到達"
@@ -111,10 +110,10 @@ public export
 receiveFromLifecycle :
   OUCState ->
   ChainId ->
-  EvmAddress ->              -- target
-  EvmAddress ->              -- newImpl
-  EvmAddress ->              -- ou
-  ICPrincipal ->             -- proposer
+  ValidatedEvmAddress ->     -- target
+  ValidatedEvmAddress ->     -- newImpl
+  ValidatedEvmAddress ->     -- ou
+  ValidatedPrincipal ->      -- proposer
   String ->                  -- rationale
   String ->                  -- codeHash
   String ->                  -- sourceEvidence (from LazyEvmLifecycle)
@@ -136,7 +135,7 @@ routeToAuditor :
   Nat ->                     -- currentTime
   FR OUCState
 routeToAuditor state pid aid now = do
-  newState <- assignAuditor state pid aid now
+  newState <- assignAuditorToProposal state pid aid now
   ok Update "routeToAuditor"
      ("Routed " ++ show pid ++ " to " ++ show aid)
      newState
@@ -168,7 +167,7 @@ record ExecutionRequest where
   constructor MkExecutionRequest
   proposalId : ProposalId
   chainId    : ChainId
-  target     : EvmAddress
+  target     : ValidatedEvmAddress
   calldata   : String        -- Encoded upgrade calldata
   signature  : String        -- OUC (vetKey) signature authorizing execution
   deadline   : Nat           -- Execution deadline
@@ -201,10 +200,12 @@ prepareExecution :
   FR ExecutionRequest
 prepareExecution state pid deadline = do
   proposal <- findProposal state pid
-  case proposal.status of
-    Approved =>
+  case proposal.state of
+    SApproved =>
       let req = MkExecutionRequest
-            pid proposal.chainId proposal.target
+            pid
+            (MkChainId proposal.chainId)
+            proposal.target
             ""  -- Calldata would be encoded elsewhere
             ""  -- Signature would be added by signing service
             deadline
@@ -248,23 +249,23 @@ recordExecution state pid result now =
 -- Proposal Statistics
 -- =============================================================================
 
-||| Get count of proposals by status
+||| Get count of proposals by state
 public export
-countByStatus : OUCState -> ProposalStatus -> Nat
-countByStatus state status = length (filter (\p => p.status == status) state.proposals)
+countByState : OUCState -> ProposalState -> Nat
+countByState state targetState = length (filter (\p => p.state == targetState) state.proposals)
 
 ||| Get all pending proposals for a chain
 public export
-getPendingForChain : OUCState -> ChainId -> List UpgradeProposal
+getPendingForChain : OUCState -> ChainId -> List Proposal
 getPendingForChain state chainId =
-  filter (\p => p.chainId == chainId && p.status == Pending) state.proposals
+  filter (\p => p.chainId == chainId.value) (filterPending state.proposals)
 
 ||| Get proposals awaiting review
 public export
-getAwaitingReview : OUCState -> List UpgradeProposal
-getAwaitingReview state = filter (\p => p.status == UnderReview) state.proposals
+getAwaitingReview : OUCState -> List Proposal
+getAwaitingReview state = filterUnderReview state.proposals
 
 ||| Get approved proposals ready for execution
 public export
-getApprovedForExecution : OUCState -> List UpgradeProposal
-getApprovedForExecution state = filter (\p => p.status == Approved) state.proposals
+getApprovedForExecution : OUCState -> List Proposal
+getApprovedForExecution state = filterApproved state.proposals

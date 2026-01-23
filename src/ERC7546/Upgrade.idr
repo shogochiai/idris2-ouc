@@ -9,6 +9,7 @@ module ERC7546.Upgrade
 
 import FRMonad.Core
 import OUC.Functions.Core
+import OUC.Types.Validated
 import OUC.Functions.MultiSig
 import OUC.Functions.Signatures
 import HttpOutcall.Core
@@ -29,17 +30,18 @@ toSignatureBundle : AggregatedSignatures -> SignatureBundle
 toSignatureBundle agg = MkSignatureBundle
   agg.proposalId.value
   agg.proposerSig
-  (map (\(aid, sig) => (aid.principal.text, sig)) agg.auditorSigs)
+  (map (\(aid, sig) => (principalText aid.principal, sig)) agg.auditorSigs)
 
 -- =============================================================================
 -- Upgrade Execution Types
 -- =============================================================================
 
 ||| Complete upgrade request with all required data
+||| Proposal must be in Approved state (checked at runtime)
 public export
 record UpgradeRequest where
   constructor MkUpgradeRequest
-  proposal    : UpgradeProposal
+  proposal    : Proposal           -- Must be in SApproved state
   voting      : VotingSession
   signatures  : AggregatedSignatures
   chainConfig : ChainTxConfig
@@ -49,7 +51,7 @@ record UpgradeRequest where
 
 public export
 Show UpgradeRequest where
-  show r = "UpgradeRequest{proposal=" ++ show r.proposal.id ++
+  show r = "UpgradeRequest{proposal=" ++ show r.proposal.proposalId ++
            ", chain=" ++ show r.chainConfig.chainId ++ "}"
 
 ||| Upgrade execution result
@@ -80,18 +82,18 @@ isUpgradeSuccess _ = False
 -- =============================================================================
 
 ||| Validate upgrade request before execution
+||| Note: Status check is no longer needed - type system enforces Approved status
 public export
 validateUpgradeRequest :
   UpgradeRequest ->
   Nat ->              -- currentTime
   FR ()
 validateUpgradeRequest req now = do
-  -- Check proposal status
-  case req.proposal.status of
-    Approved => pure ()
-    other => fail Update "validateUpgradeRequest"
-                  ("Invalid proposal status: " ++ show other)
-                  (InvalidState "Proposal must be Approved for execution")
+  -- Check proposal is approved
+  if req.proposal.state /= SApproved
+    then fail Update "validateUpgradeRequest" "Proposal not approved"
+              (InvalidState ("Expected Approved, got " ++ show req.proposal.state))
+    else pure ()
 
   -- Check deadline
   if now > req.deadline
@@ -100,15 +102,15 @@ validateUpgradeRequest req now = do
     else pure ()
 
   -- Check chain ID matches
-  if req.proposal.chainId.value /= req.chainConfig.chainId
+  if req.proposal.chainId /= req.chainConfig.chainId
     then fail Update "validateUpgradeRequest"
-              ("Chain mismatch: proposal=" ++ show req.proposal.chainId.value ++
+              ("Chain mismatch: proposal=" ++ show req.proposal.chainId ++
                ", config=" ++ show req.chainConfig.chainId)
               (InvalidState "Chain ID mismatch")
     else pure ()
 
   -- Check signatures match proposal
-  if req.signatures.proposalId /= req.proposal.id
+  if req.signatures.proposalId.value /= req.proposal.proposalId
     then fail Update "validateUpgradeRequest"
               "Signatures are for different proposal"
               (InvalidState "Signature/proposal ID mismatch")
@@ -130,12 +132,12 @@ buildCompleteUpgradeCalldata :
   FR String
 buildCompleteUpgradeCalldata req = do
   -- Get base upgrade calldata
-  baseCalldata <- buildUpgradeTo req.proposal.newImpl.hex
+  baseCalldata <- buildUpgradeTo (evmAddressHex req.proposal.newImpl)
 
   -- Build full OU.executeUpgrade calldata
   buildUpgradeCalldata
-    req.proposal.target.hex
-    req.proposal.newImpl.hex
+    (evmAddressHex req.proposal.target)
+    (evmAddressHex req.proposal.newImpl)
     req.signatures.proposerSig
     (map snd req.signatures.auditorSigs)
 
@@ -159,9 +161,9 @@ executeUpgradeViaOU req now = do
   -- Step 3: Build execution params
   let execParams = MkUpgradeExecParams
         req.chainConfig
-        req.proposal.ou.hex
-        req.proposal.target.hex
-        req.proposal.newImpl.hex
+        (evmAddressHex req.proposal.ou)
+        (evmAddressHex req.proposal.target)
+        (evmAddressHex req.proposal.newImpl)
         (toSignatureBundle req.signatures)
         req.nonce
         req.maxGasPrice
@@ -189,9 +191,10 @@ executeUpgradeViaOU req now = do
 -- =============================================================================
 
 ||| Complete upgrade orchestration from approved proposal
+||| Proposal must be in Approved state (checked at runtime)
 public export
 orchestrateUpgrade :
-  UpgradeProposal ->
+  Proposal ->         -- Must be in SApproved state
   VotingSession ->
   ChainTxConfig ->
   Nat ->              -- nonce

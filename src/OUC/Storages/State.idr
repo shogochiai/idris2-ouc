@@ -14,6 +14,7 @@
 module OUC.Storages.State
 
 import OUC.Functions.Core
+import OUC.Types.Validated
 -- import ICP.StableBTree  -- TODO: fix pack dependency resolution
 import Data.List
 import Data.String
@@ -55,9 +56,9 @@ keyProposal pid = "proposal" ++ keySep ++ padNum 12 pid.value
 
 ||| Proposal status index key
 export
-keyProposalByStatus : ProposalStatus -> ProposalId -> String
-keyProposalByStatus status pid =
-  "proposal" ++ keySep ++ "status" ++ keySep ++ show status ++ keySep ++ padNum 12 pid.value
+keyProposalByStatus : ProposalState -> ProposalId -> String
+keyProposalByStatus state pid =
+  "proposal" ++ keySep ++ "status" ++ keySep ++ show state ++ keySep ++ padNum 12 pid.value
 
 ||| Proposal chain index key
 export
@@ -68,19 +69,19 @@ keyProposalByChain chain pid =
 ||| Auditor primary key
 export
 keyAuditor : AuditorId -> String
-keyAuditor aid = "auditor" ++ keySep ++ aid.principal.text
+keyAuditor aid = "auditor" ++ keySep ++ principalText aid.principal
 
 ||| Auditor status index key
 export
 keyAuditorByStatus : AuditorStatus -> AuditorId -> String
 keyAuditorByStatus status aid =
-  "auditor" ++ keySep ++ "status" ++ keySep ++ show status ++ keySep ++ aid.principal.text
+  "auditor" ++ keySep ++ "status" ++ keySep ++ show status ++ keySep ++ principalText aid.principal
 
 ||| Review primary key
 export
 keyReview : ProposalId -> AuditorId -> String
 keyReview pid aid =
-  "review" ++ keySep ++ padNum 12 pid.value ++ keySep ++ aid.principal.text
+  "review" ++ keySep ++ padNum 12 pid.value ++ keySep ++ principalText aid.principal
 
 -- =============================================================================
 -- Serialization
@@ -90,26 +91,26 @@ keyReview pid aid =
 fieldSep : String
 fieldSep = "|"
 
-||| Serialize ProposalStatus
-serializeStatus : ProposalStatus -> String
-serializeStatus Pending     = "0"
-serializeStatus UnderReview = "1"
-serializeStatus Approved    = "2"
-serializeStatus Rejected    = "3"
-serializeStatus Executed    = "4"
-serializeStatus Expired     = "5"
-serializeStatus Cancelled   = "6"
+||| Serialize ProposalState
+serializeState : ProposalState -> String
+serializeState SPending     = "0"
+serializeState SUnderReview = "1"
+serializeState SApproved    = "2"
+serializeState SRejected    = "3"
+serializeState SExecuted    = "4"
+serializeState SExpired     = "5"
+serializeState SCancelled   = "6"
 
-||| Deserialize ProposalStatus
-deserializeStatus : String -> Maybe ProposalStatus
-deserializeStatus "0" = Just Pending
-deserializeStatus "1" = Just UnderReview
-deserializeStatus "2" = Just Approved
-deserializeStatus "3" = Just Rejected
-deserializeStatus "4" = Just Executed
-deserializeStatus "5" = Just Expired
-deserializeStatus "6" = Just Cancelled
-deserializeStatus _   = Nothing
+||| Deserialize ProposalState
+deserializeState : String -> Maybe ProposalState
+deserializeState "0" = Just SPending
+deserializeState "1" = Just SUnderReview
+deserializeState "2" = Just SApproved
+deserializeState "3" = Just SRejected
+deserializeState "4" = Just SExecuted
+deserializeState "5" = Just SExpired
+deserializeState "6" = Just SCancelled
+deserializeState _   = Nothing
 
 ||| Serialize AuditorStatus
 serializeAuditorStatus : AuditorStatus -> String
@@ -126,20 +127,20 @@ deserializeAuditorStatus "2" = Just Slashed
 deserializeAuditorStatus "3" = Just Inactive
 deserializeAuditorStatus _   = Nothing
 
-||| Serialize UpgradeProposal
+||| Serialize Proposal
 ||| Format: id|chainId|target|newImpl|ou|proposer|rationale|codeHash|status|auditors|created|updated|expires
 export
-serializeProposal : UpgradeProposal -> String
+serializeProposal : Proposal -> String
 serializeProposal p =
-  show p.id.value ++ fieldSep ++
-  show p.chainId.value ++ fieldSep ++
-  p.target.hex ++ fieldSep ++
-  p.newImpl.hex ++ fieldSep ++
-  p.ou.hex ++ fieldSep ++
-  p.proposer.text ++ fieldSep ++
+  show p.proposalId ++ fieldSep ++
+  show p.chainId ++ fieldSep ++
+  evmAddressHex p.target ++ fieldSep ++
+  evmAddressHex p.newImpl ++ fieldSep ++
+  evmAddressHex p.ou ++ fieldSep ++
+  principalText p.proposer ++ fieldSep ++
   p.rationale ++ fieldSep ++
   p.codeHash ++ fieldSep ++
-  serializeStatus p.status ++ fieldSep ++
+  serializeState p.state ++ fieldSep ++
   show (length p.assignedAuditors) ++ fieldSep ++  -- Auditors stored separately
   show p.createdAt ++ fieldSep ++
   show p.updatedAt ++ fieldSep ++
@@ -150,7 +151,7 @@ serializeProposal p =
 export
 serializeAuditor : Auditor -> String
 serializeAuditor a =
-  a.id.principal.text ++ fieldSep ++
+  principalText a.id.principal ++ fieldSep ++
   serializeAuditorStatus a.status ++ fieldSep ++
   show a.reputation ++ fieldSep ++
   show a.totalReviews ++ fieldSep ++
@@ -172,7 +173,7 @@ export
 serializeReview : Review -> String
 serializeReview r =
   show r.proposalId.value ++ fieldSep ++
-  r.auditorId.principal.text ++ fieldSep ++
+  principalText r.auditorId.principal ++ fieldSep ++
   serializeDecision r.decision ++ fieldSep ++
   r.comment ++ fieldSep ++
   show r.timestamp ++ fieldSep ++
@@ -184,8 +185,8 @@ serializeReview r =
 
 ||| Prefix for proposals by status
 export
-prefixProposalsByStatus : ProposalStatus -> String
-prefixProposalsByStatus status = "proposal" ++ keySep ++ "status" ++ keySep ++ show status ++ keySep
+prefixProposalsByStatus : ProposalState -> String
+prefixProposalsByStatus state = "proposal" ++ keySep ++ "status" ++ keySep ++ show state ++ keySep
 
 ||| Prefix for proposals by chain
 export

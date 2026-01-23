@@ -4,12 +4,14 @@ module Integration.Tests.AllTests
 
 import FRMonad.Core
 import OUC.Functions.Core
+import OUC.Types.Validated
 import AuditorPool.Core
 import AuditorPool.Tests.VoteTests
 import Rewards.Core
 import Proposals.Core
 import Economics.Tests.FeeToCyclesE2E
 import Economics.Tests.AllTests as EconTests
+import Candid.Tests.AllTests as CandidTests
 import Data.List
 import Data.String
 
@@ -50,20 +52,20 @@ runTestSuite suiteName tests = do
 -- Test Helpers
 -- =============================================================================
 
-testPrincipal : ICPrincipal
-testPrincipal = MkICPrincipal "2vxsx-fae"
+testPrincipal : ValidatedPrincipal
+testPrincipal = unsafeMkPrincipal "2vxsx-fae"
 
 testChain : ChainId
 testChain = MkChainId 1
 
-testTarget : EvmAddress
-testTarget = MkEvmAddress "0x1234567890123456789012345678901234567890"
+testTarget : ValidatedEvmAddress
+testTarget = unsafeMkEvmAddress "1234567890123456789012345678901234567890"
 
-testNewImpl : EvmAddress
-testNewImpl = MkEvmAddress "0xabcdef0123456789abcdef0123456789abcdef01"
+testNewImpl : ValidatedEvmAddress
+testNewImpl = unsafeMkEvmAddress "abcdef0123456789abcdef0123456789abcdef01"
 
-testOU : EvmAddress
-testOU = MkEvmAddress "0xfedcba9876543210fedcba9876543210fedcba98"
+testOU : ValidatedEvmAddress
+testOU = unsafeMkEvmAddress "fedcba9876543210fedcba9876543210fedcba98"
 
 baseTime : Nat
 baseTime = 1704067200000000000
@@ -119,7 +121,7 @@ test_full_pipeline = do
                       case findProposal state4 pid of
                         Fail _ _ => pure False
                         Ok finalProposal _ =>
-                          pure (finalProposal.status == Executed)
+                          pure (finalProposal.state == SExecuted)
 
 ||| INT_PIPE_002: Proposal rejection workflow
 ||| Tests the flow when auditor rejects proposal
@@ -142,7 +144,7 @@ test_rejection_workflow = do
             Ok state3 _ =>
               case findProposal state3 pid of
                 Fail _ _ => pure False
-                Ok proposal _ => pure (proposal.status == Rejected)
+                Ok proposal _ => pure (proposal.state == SRejected)
 
 -- =============================================================================
 -- Edge Case Integration Tests
@@ -189,7 +191,7 @@ test_markExecuted_approved = do
     Fail _ _ => pure False
     Ok (state1, pid) _ =>
       let aid = MkAuditorId testPrincipal
-      in case assignAuditor state1 pid aid baseTime of
+      in case assignAuditorToProposal state1 pid aid baseTime of
         Fail _ _ => pure False
         Ok state2 _ =>
           case submitReview state2 pid aid ApproveUpgrade "ok" "sig" baseTime of
@@ -198,7 +200,7 @@ test_markExecuted_approved = do
               case markExecuted state3 pid "0xtxhash" baseTime of
                 Ok state4 _ =>
                   case findProposal state4 pid of
-                    Ok p _ => pure (p.status == Executed)
+                    Ok p _ => pure (p.state == SExecuted)
                     Fail _ _ => pure False
                 Fail _ _ => pure False
 
@@ -221,7 +223,7 @@ test_markExecuted_rejected = do
     Fail _ _ => pure False
     Ok (state1, pid) _ =>
       let aid = MkAuditorId testPrincipal
-      in case assignAuditor state1 pid aid baseTime of
+      in case assignAuditorToProposal state1 pid aid baseTime of
         Fail _ _ => pure False
         Ok state2 _ =>
           case submitReview state2 pid aid (RejectUpgrade "bad") "no" "sig" baseTime of
@@ -243,13 +245,13 @@ test_submitReview_underReview = do
     Fail _ _ => pure False
     Ok (state1, pid) _ =>
       let aid = MkAuditorId testPrincipal
-      in case assignAuditor state1 pid aid baseTime of
+      in case assignAuditorToProposal state1 pid aid baseTime of
         Fail _ _ => pure False
         Ok state2 _ =>
           case submitReview state2 pid aid ApproveUpgrade "looks good" "sig" baseTime of
             Ok state3 _ =>
               case findProposal state3 pid of
-                Ok p _ => pure (p.status == Approved)
+                Ok p _ => pure (p.state == SApproved)
                 Fail _ _ => pure False
             Fail _ _ => pure False
 
@@ -273,13 +275,13 @@ test_submitReview_requestChanges = do
     Fail _ _ => pure False
     Ok (state1, pid) _ =>
       let aid = MkAuditorId testPrincipal
-      in case assignAuditor state1 pid aid baseTime of
+      in case assignAuditorToProposal state1 pid aid baseTime of
         Fail _ _ => pure False
         Ok state2 _ =>
           case submitReview state2 pid aid (RequestChanges "add tests") "needs work" "sig" baseTime of
             Ok state3 _ =>
               case findProposal state3 pid of
-                Ok p _ => pure (p.status == UnderReview)
+                Ok p _ => pure (p.state == SUnderReview)
                 Fail _ _ => pure False
             Fail _ _ => pure False
 
@@ -316,7 +318,7 @@ test_getPendingForChain_excludeNonPending = do
     Fail _ _ => pure False
     Ok (state1, pid) _ =>
       let aid = MkAuditorId testPrincipal
-      in case assignAuditor state1 pid aid baseTime of
+      in case assignAuditorToProposal state1 pid aid baseTime of
         Fail _ _ => pure False
         Ok state2 _ =>
           let pending = getPendingForChain state2 testChain
@@ -347,7 +349,7 @@ test_recordExecution_reverted = do
     Fail _ _ => pure False
     Ok (state1, pid) _ =>
       let aid = MkAuditorId testPrincipal
-      in case assignAuditor state1 pid aid baseTime of
+      in case assignAuditorToProposal state1 pid aid baseTime of
         Fail _ _ => pure False
         Ok state2 _ =>
           case submitReview state2 pid aid ApproveUpgrade "ok" "sig" baseTime of
@@ -365,7 +367,7 @@ test_recordExecution_timeout = do
     Fail _ _ => pure False
     Ok (state1, pid) _ =>
       let aid = MkAuditorId testPrincipal
-      in case assignAuditor state1 pid aid baseTime of
+      in case assignAuditorToProposal state1 pid aid baseTime of
         Fail _ _ => pure False
         Ok state2 _ =>
           case submitReview state2 pid aid ApproveUpgrade "ok" "sig" baseTime of
@@ -383,7 +385,7 @@ test_recordExecution_rpcError = do
     Fail _ _ => pure False
     Ok (state1, pid) _ =>
       let aid = MkAuditorId testPrincipal
-      in case assignAuditor state1 pid aid baseTime of
+      in case assignAuditorToProposal state1 pid aid baseTime of
         Fail _ _ => pure False
         Ok state2 _ =>
           case submitReview state2 pid aid ApproveUpgrade "ok" "sig" baseTime of
@@ -405,7 +407,7 @@ test_getAwaitingReview_present = do
     Fail _ _ => pure False
     Ok (state1, pid) _ =>
       let aid = MkAuditorId testPrincipal
-      in case assignAuditor state1 pid aid baseTime of
+      in case assignAuditorToProposal state1 pid aid baseTime of
         Fail _ _ => pure False
         Ok state2 _ =>
           let awaiting = getAwaitingReview state2
@@ -419,7 +421,7 @@ test_getAwaitingReview_excludeApproved = do
     Fail _ _ => pure False
     Ok (state1, pid) _ =>
       let aid = MkAuditorId testPrincipal
-      in case assignAuditor state1 pid aid baseTime of
+      in case assignAuditorToProposal state1 pid aid baseTime of
         Fail _ _ => pure False
         Ok state2 _ =>
           case submitReview state2 pid aid ApproveUpgrade "ok" "sig" baseTime of
@@ -432,11 +434,11 @@ test_getAwaitingReview_excludeApproved = do
 -- AuditorPool Tests (HIGH IMPACT - previously untested)
 -- =============================================================================
 
-testAuditorPrincipal : ICPrincipal
-testAuditorPrincipal = MkICPrincipal "aaaaa-aa"
+testAuditorPrincipal : ValidatedPrincipal
+testAuditorPrincipal = unsafeMkPrincipal "aaaaa-aa"
 
-testAuditorPrincipal2 : ICPrincipal
-testAuditorPrincipal2 = MkICPrincipal "bbbbb-bb"
+testAuditorPrincipal2 : ValidatedPrincipal
+testAuditorPrincipal2 = unsafeMkPrincipal "bbbbb-bb"
 
 testPoolConfig : PoolConfig
 testPoolConfig = defaultConfig
@@ -809,7 +811,7 @@ test_countByStatus_pending = do
       case submitProposal state1 testChain testTarget testNewImpl testOU testPrincipal "Test2" "0x2" baseTime of
         Fail _ _ => pure False
         Ok (state2, _) _ =>
-          pure (countByStatus state2 Pending == 2)
+          pure (countByState state2 SPending == 2)
 
 ||| INT_CNT_002: countByStatus with UnderReview
 test_countByStatus_underReview : IO Bool
@@ -819,10 +821,10 @@ test_countByStatus_underReview = do
     Fail _ _ => pure False
     Ok (state1, pid) _ =>
       let aid = MkAuditorId testPrincipal
-      in case assignAuditor state1 pid aid baseTime of
+      in case assignAuditorToProposal state1 pid aid baseTime of
         Fail _ _ => pure False
         Ok state2 _ =>
-          pure (countByStatus state2 UnderReview == 1 && countByStatus state2 Pending == 0)
+          pure (countByState state2 SUnderReview == 1 && countByState state2 SPending == 0)
 
 ||| INT_CNT_003: countByStatus with Approved
 test_countByStatus_approved : IO Bool
@@ -832,23 +834,23 @@ test_countByStatus_approved = do
     Fail _ _ => pure False
     Ok (state1, pid) _ =>
       let aid = MkAuditorId testPrincipal
-      in case assignAuditor state1 pid aid baseTime of
+      in case assignAuditorToProposal state1 pid aid baseTime of
         Fail _ _ => pure False
         Ok state2 _ =>
           case submitReview state2 pid aid ApproveUpgrade "ok" "sig" baseTime of
             Fail _ _ => pure False
             Ok state3 _ =>
-              pure (countByStatus state3 Approved == 1)
+              pure (countByState state3 SApproved == 1)
 
 ||| INT_CNT_004: countByStatus with empty state
 test_countByStatus_empty : IO Bool
 test_countByStatus_empty = do
   let state = initialState testPrincipal
-  pure (countByStatus state Pending == 0 &&
-        countByStatus state UnderReview == 0 &&
-        countByStatus state Approved == 0 &&
-        countByStatus state Rejected == 0 &&
-        countByStatus state Executed == 0)
+  pure (countByState state SPending == 0 &&
+        countByState state SUnderReview == 0 &&
+        countByState state SApproved == 0 &&
+        countByState state SRejected == 0 &&
+        countByState state SExecuted == 0)
 
 -- =============================================================================
 -- FRC Evidence Tests
@@ -963,6 +965,7 @@ runAllTests = do
   Integration.Tests.AllTests.runTestSuite "Fee-to-Cycles E2E" e2eTestDefs
   Integration.Tests.AllTests.runTestSuite "Vote (n-of-m threshold)" voteTestDefs
   EconTests.runAllTests
+  CandidTests.runExtendedTests
 
 ||| Main entry point
 main : IO ()

@@ -9,6 +9,7 @@
 module OUC.Functions.Core
 
 import FRMonad.Core
+import OUC.Types.Validated
 import Data.List
 
 %default total
@@ -32,6 +33,8 @@ Eq ChainId where
   c1 == c2 = c1.value == c2.value
 
 ||| EVM Address (20 bytes as hex string for simplicity)
+||| DEPRECATED: For new code, use ValidatedEvmAddress from OUC.Types.Validated
+||| which provides compile-time format guarantees.
 public export
 record EvmAddress where
   constructor MkEvmAddress
@@ -45,7 +48,19 @@ public export
 Eq EvmAddress where
   a1 == a2 = a1.hex == a2.hex
 
+||| Convert legacy EvmAddress to validated (fails if invalid format)
+public export
+toValidatedAddress : EvmAddress -> Maybe ValidatedEvmAddress
+toValidatedAddress addr = mkEvmAddress addr.hex
+
+||| Convert validated address back to legacy type
+public export
+fromValidatedAddress : ValidatedEvmAddress -> EvmAddress
+fromValidatedAddress va = MkEvmAddress (evmAddressHex va)
+
 ||| ICP Principal (as string representation)
+||| DEPRECATED: For new code, use ValidatedPrincipal from OUC.Types.Validated
+||| which provides compile-time format guarantees.
 public export
 record ICPrincipal where
   constructor MkICPrincipal
@@ -59,6 +74,16 @@ public export
 Eq ICPrincipal where
   p1 == p2 = p1.text == p2.text
 
+||| Convert legacy ICPrincipal to validated (fails if invalid format)
+public export
+toValidatedPrincipal : ICPrincipal -> Maybe ValidatedPrincipal
+toValidatedPrincipal p = mkPrincipal p.text
+
+||| Convert validated principal back to legacy type
+public export
+fromValidatedPrincipal : ValidatedPrincipal -> ICPrincipal
+fromValidatedPrincipal vp = MkICPrincipal (principalText vp)
+
 -- =============================================================================
 -- Auditor Types (must be before UpgradeProposal which uses AuditorId)
 -- =============================================================================
@@ -67,7 +92,7 @@ Eq ICPrincipal where
 public export
 record AuditorId where
   constructor MkAuditorId
-  principal : ICPrincipal
+  principal : ValidatedPrincipal
 
 public export
 Show AuditorId where
@@ -95,61 +120,8 @@ public export
 Eq ProposalId where
   p1 == p2 = p1.value == p2.value
 
-||| Proposal status lifecycle
-public export
-data ProposalStatus
-  = Pending        -- Awaiting auditor assignment
-  | UnderReview    -- Assigned to auditor(s)
-  | Approved       -- Approved, awaiting execution
-  | Rejected       -- Rejected by auditor(s)
-  | Executed       -- Successfully executed on-chain
-  | Expired        -- Timed out
-  | Cancelled      -- Cancelled by proposer
-
-public export
-Show ProposalStatus where
-  show Pending     = "Pending"
-  show UnderReview = "UnderReview"
-  show Approved    = "Approved"
-  show Rejected    = "Rejected"
-  show Executed    = "Executed"
-  show Expired     = "Expired"
-  show Cancelled   = "Cancelled"
-
-public export
-Eq ProposalStatus where
-  Pending     == Pending     = True
-  UnderReview == UnderReview = True
-  Approved    == Approved    = True
-  Rejected    == Rejected    = True
-  Executed    == Executed    = True
-  Expired     == Expired     = True
-  Cancelled   == Cancelled   = True
-  _           == _           = False
-
-||| Upgrade proposal payload
-||| Contains all information needed to execute an upgrade
-public export
-record UpgradeProposal where
-  constructor MkUpgradeProposal
-  id               : ProposalId
-  chainId          : ChainId
-  target           : EvmAddress     -- Contract to upgrade (ERC-7546 Proxy)
-  newImpl          : EvmAddress     -- New implementation address
-  ou               : EvmAddress     -- OptimisticUpgrader contract
-  proposer         : ICPrincipal    -- ICP principal who submitted
-  rationale        : String         -- Human-readable justification
-  codeHash         : String         -- Hash of new implementation code
-  status           : ProposalStatus
-  assignedAuditors : List AuditorId -- VRF/commit-reveal selected auditors
-  createdAt        : Nat            -- IC timestamp (nanoseconds)
-  updatedAt        : Nat
-  expiresAt        : Nat
-
-public export
-Show UpgradeProposal where
-  show p = "UpgradeProposal{id=" ++ show p.id ++ ", chain=" ++ show p.chainId
-        ++ ", target=" ++ show p.target ++ ", status=" ++ show p.status ++ "}"
+-- Note: ProposalStatus is replaced by ProposalState from OUC.Types.Validated
+-- Note: UpgradeProposal is replaced by Proposal from OUC.Types.Validated
 
 -- =============================================================================
 -- Auditor Status and Record Types
@@ -240,15 +212,15 @@ public export
 record OUCState where
   constructor MkOUCState
   nextProposalId : Nat
-  proposals      : List UpgradeProposal
+  proposals      : List Proposal
   auditors       : List Auditor
   reviews        : List Review
-  owner          : ICPrincipal
+  owner          : ValidatedPrincipal
   version        : Nat
 
 ||| Initial OUC state
 public export
-initialState : ICPrincipal -> OUCState
+initialState : ValidatedPrincipal -> OUCState
 initialState owner = MkOUCState 1 [] [] [] owner 1
 
 -- =============================================================================
@@ -260,20 +232,19 @@ public export
 submitProposal :
   OUCState ->
   ChainId ->
-  EvmAddress ->      -- target
-  EvmAddress ->      -- newImpl
-  EvmAddress ->      -- ou
-  ICPrincipal ->     -- proposer
-  String ->          -- rationale
-  String ->          -- codeHash
-  Nat ->             -- currentTime
+  ValidatedEvmAddress ->  -- target
+  ValidatedEvmAddress ->  -- newImpl
+  ValidatedEvmAddress ->  -- ou
+  ValidatedPrincipal ->   -- proposer
+  String ->               -- rationale
+  String ->               -- codeHash
+  Nat ->                  -- currentTime
   FR (OUCState, ProposalId)
 submitProposal state chainId target newImpl ou proposer rationale codeHash now =
   let proposalId = MkProposalId state.nextProposalId
       expiresAt = now + 604800000000000  -- 7 days in nanoseconds
-      proposal = MkUpgradeProposal
-        proposalId chainId target newImpl ou proposer rationale codeHash
-        Pending [] now now expiresAt  -- assignedAuditors starts empty
+      -- Create pending proposal
+      proposal = newProposal state.nextProposalId chainId.value target newImpl ou proposer rationale codeHash now expiresAt
       newState = { nextProposalId := state.nextProposalId + 1
                  , proposals := proposal :: state.proposals
                  } state
@@ -281,39 +252,40 @@ submitProposal state chainId target newImpl ou proposer rationale codeHash now =
 
 ||| Find proposal by ID
 public export
-findProposal : OUCState -> ProposalId -> FR UpgradeProposal
+findProposal : OUCState -> ProposalId -> FR Proposal
 findProposal state pid =
-  case find (\p => p.id == pid) state.proposals of
-    Just p  => ok Query "findProposal" ("Found " ++ show pid) p
+  case findById pid.value state.proposals of
+    Just p => ok Query "findProposal" ("Found " ++ show pid) p
     Nothing => notFound Query "findProposal" ("Proposal " ++ show pid ++ " not found")
 
-||| Assign auditor to proposal
+||| Assign auditor to proposal (only Pending proposals can be assigned)
 public export
-assignAuditor :
+assignAuditorToProposal :
   OUCState ->
   ProposalId ->
   AuditorId ->
   Nat ->             -- currentTime
   FR OUCState
-assignAuditor state pid aid now = do
-  proposal <- findProposal state pid
-  case proposal.status of
-    Pending =>
-      let newAuditors = aid :: proposal.assignedAuditors
-          updated : UpgradeProposal
-          updated = MkUpgradeProposal
-            proposal.id proposal.chainId proposal.target proposal.newImpl
-            proposal.ou proposal.proposer proposal.rationale proposal.codeHash
-            UnderReview newAuditors proposal.createdAt now proposal.expiresAt
-          newProposals = map (\p => if p.id == pid then updated else p) state.proposals
-          newState : OUCState
-          newState = MkOUCState state.nextProposalId newProposals state.auditors state.reviews state.owner state.version
-      in ok Update "assignAuditor" ("Assigned " ++ show aid ++ " to " ++ show pid) newState
-    other =>
-      fail Update "assignAuditor" ("Cannot assign to " ++ show other ++ " proposal")
-           (InvalidState "Proposal not in Pending status")
+assignAuditorToProposal state pid aid now =
+  case findByIdInState pid.value SPending state.proposals of
+    Just pending =>
+      case assignAuditor pending aid.principal now of
+        Just assigned =>
+          -- Update the list: replace old with new
+          let updateProposal : Proposal -> Proposal
+              updateProposal p = if p.proposalId == pid.value then assigned else p
+              newProposals = map updateProposal state.proposals
+              newState = MkOUCState state.nextProposalId newProposals state.auditors state.reviews state.owner state.version
+          in ok Update "assignAuditor" ("Assigned " ++ show aid ++ " to " ++ show pid) newState
+        Nothing =>
+          fail Update "assignAuditor" ("Failed to assign auditor to " ++ show pid)
+               (InvalidState "Transition failed")
+    Nothing =>
+      -- Not found OR not in Pending state
+      fail Update "assignAuditor" ("Cannot assign to proposal " ++ show pid)
+           (InvalidState "Proposal not found or not in Pending status")
 
-||| Submit review for proposal
+||| Submit review for proposal (only UnderReview proposals can be reviewed)
 public export
 submitReview :
   OUCState ->
@@ -324,30 +296,31 @@ submitReview :
   String ->          -- signature
   Nat ->             -- currentTime
   FR OUCState
-submitReview state pid aid decision comment sig now = do
-  proposal <- findProposal state pid
-  case proposal.status of
-    UnderReview =>
+submitReview state pid aid decision comment sig now =
+  case findByIdInState pid.value SUnderReview state.proposals of
+    Just underReview =>
       let review = MkReview pid aid decision comment now sig
-          newStatus : ProposalStatus
-          newStatus = case decision of
-            ApproveUpgrade    => Approved
-            RejectUpgrade _   => Rejected
-            RequestChanges _  => UnderReview
-          updated : UpgradeProposal
-          updated = MkUpgradeProposal
-            proposal.id proposal.chainId proposal.target proposal.newImpl
-            proposal.ou proposal.proposer proposal.rationale proposal.codeHash
-            newStatus proposal.assignedAuditors proposal.createdAt now proposal.expiresAt
-          newProposals = map (\p => if p.id == pid then updated else p) state.proposals
-          newState : OUCState
-          newState = MkOUCState state.nextProposalId newProposals state.auditors (review :: state.reviews) state.owner state.version
-      in ok Update "submitReview" ("Review submitted for " ++ show pid) newState
-    other =>
-      fail Update "submitReview" ("Cannot review " ++ show other ++ " proposal")
-           (InvalidState "Proposal not under review")
+          -- Transition based on decision
+          transitioned : Maybe Proposal
+          transitioned = case decision of
+            ApproveUpgrade    => approveProposal underReview now
+            RejectUpgrade _   => rejectProposal underReview now
+            RequestChanges _  => Just underReview  -- stays in review
+      in case transitioned of
+        Just newProp =>
+          let updateProposal : Proposal -> Proposal
+              updateProposal p = if p.proposalId == pid.value then newProp else p
+              newProposals = map updateProposal state.proposals
+              newState = MkOUCState state.nextProposalId newProposals state.auditors (review :: state.reviews) state.owner state.version
+          in ok Update "submitReview" ("Review submitted for " ++ show pid) newState
+        Nothing =>
+          fail Update "submitReview" ("Transition failed for " ++ show pid)
+               (InvalidState "State transition failed")
+    Nothing =>
+      fail Update "submitReview" ("Cannot review proposal " ++ show pid)
+           (InvalidState "Proposal not found or not under review")
 
-||| Mark proposal as executed
+||| Mark proposal as executed (only Approved proposals can be executed)
 public export
 markExecuted :
   OUCState ->
@@ -355,19 +328,19 @@ markExecuted :
   String ->          -- txHash evidence
   Nat ->             -- currentTime
   FR OUCState
-markExecuted state pid txHash now = do
-  proposal <- findProposal state pid
-  case proposal.status of
-    Approved =>
-      let updated : UpgradeProposal
-          updated = MkUpgradeProposal
-            proposal.id proposal.chainId proposal.target proposal.newImpl
-            proposal.ou proposal.proposer proposal.rationale proposal.codeHash
-            Executed proposal.assignedAuditors proposal.createdAt now proposal.expiresAt
-          newProposals = map (\p => if p.id == pid then updated else p) state.proposals
-          newState : OUCState
-          newState = MkOUCState state.nextProposalId newProposals state.auditors state.reviews state.owner state.version
-      in ok Update "markExecuted" ("Executed " ++ show pid ++ " tx=" ++ txHash) newState
-    other =>
-      fail Update "markExecuted" ("Cannot execute " ++ show other ++ " proposal")
-           (InvalidState "Proposal not approved")
+markExecuted state pid txHash now =
+  case findByIdInState pid.value SApproved state.proposals of
+    Just approved =>
+      case executeProposal approved now of
+        Just executed =>
+          let updateProposal : Proposal -> Proposal
+              updateProposal p = if p.proposalId == pid.value then executed else p
+              newProposals = map updateProposal state.proposals
+              newState = MkOUCState state.nextProposalId newProposals state.auditors state.reviews state.owner state.version
+          in ok Update "markExecuted" ("Executed " ++ show pid ++ " tx=" ++ txHash) newState
+        Nothing =>
+          fail Update "markExecuted" ("Transition failed for " ++ show pid)
+               (InvalidState "State transition failed")
+    Nothing =>
+      fail Update "markExecuted" ("Cannot execute proposal " ++ show pid)
+           (InvalidState "Proposal not found or not approved")

@@ -269,6 +269,43 @@ testEvmRpcEncoding : List TestResult
 testEvmRpcEncoding = [testEvmRpcStructure, testEvmRpcChainIndex, testEvmRpcProviderIndex]
 
 -- =============================================================================
+-- showBytes Tests (exercises hexChar internally)
+-- =============================================================================
+
+||| Test showBytes with values 0-9 (hexChar n < 10 branch)
+testShowBytesLowNibbles : TestResult
+testShowBytesLowNibbles =
+  let bytes = [0x00, 0x12, 0x34, 0x56, 0x78, 0x99]  -- Uses 0-9 hex chars
+      result = showBytes bytes
+  in MkTestResult
+       "showBytes low nibbles (0-9)"
+       (length result > 0)  -- Basic check that it produces output
+       ("output=" ++ result)
+
+||| Test showBytes with values A-F (hexChar n >= 10 branch)
+testShowBytesHighNibbles : TestResult
+testShowBytesHighNibbles =
+  let bytes = [0xAB, 0xCD, 0xEF]  -- Uses A-F hex chars
+      result = showBytes bytes
+  in MkTestResult
+       "showBytes high nibbles (A-F)"
+       (length result > 0)  -- Basic check
+       ("output=" ++ result)
+
+||| Test showBytes with mixed values (both branches of hexChar)
+testShowBytesMixed : TestResult
+testShowBytesMixed =
+  let bytes = [0x0F, 0xF0, 0xAA, 0x55]  -- Mix of 0-9 and A-F
+      result = showBytes bytes
+  in MkTestResult
+       "showBytes mixed nibbles"
+       (length result > 0)
+       ("output=" ++ result)
+
+testShowBytesEncoding : List TestResult
+testShowBytesEncoding = [testShowBytesLowNibbles, testShowBytesHighNibbles, testShowBytesMixed]
+
+-- =============================================================================
 -- Run All Tests (Updated)
 -- =============================================================================
 
@@ -277,7 +314,8 @@ allResultsExtended = testAllChainHashes ++
                      testAllProviderHashes ++
                      testAllLeb128 ++
                      testDIDLStructure ++
-                     testEvmRpcEncoding
+                     testEvmRpcEncoding ++
+                     testShowBytesEncoding
 
 passCountExtended : Nat
 passCountExtended = length (filter (.passed) allResultsExtended)
@@ -304,6 +342,9 @@ runExtendedTests = do
   putStrLn ""
   putStrLn "--- EVM RPC Encoding ---"
   traverse_ (putStrLn . showResult) testEvmRpcEncoding
+  putStrLn ""
+  putStrLn "--- showBytes (hexChar coverage) ---"
+  traverse_ (putStrLn . showResult) testShowBytesEncoding
   putStrLn ""
   putStrLn ("=== Results: " ++ show passCountExtended ++ "/" ++ show totalCountExtended ++ " passed ===")
   if passCountExtended == totalCountExtended

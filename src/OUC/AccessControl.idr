@@ -10,6 +10,7 @@
 module OUC.AccessControl
 
 import OUC.Functions.Core
+import OUC.Types.Validated
 import Data.List
 import Data.String
 
@@ -239,7 +240,7 @@ resolveRole caller controller auditors subscribers =
     isAuditor : String -> List Auditor -> Bool
     isAuditor p [] = False
     isAuditor p (a :: as) =
-      if a.id.principal.text == p
+      if principalText a.id.principal == p
         then True
         else isAuditor p as
 
@@ -248,7 +249,7 @@ public export
 findAuditor : String -> List Auditor -> Maybe AuditorId
 findAuditor _ [] = Nothing
 findAuditor p (a :: as) =
-  if a.id.principal.text == p
+  if principalText a.id.principal == p
     then Just a.id
     else findAuditor p as
 

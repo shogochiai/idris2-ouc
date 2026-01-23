@@ -7,6 +7,7 @@ module AuditorPool.Vote
 
 import FRMonad.Core
 import OUC.Functions.Core
+import OUC.Types.Validated
 import AuditorPool.Core
 import Data.List
 
@@ -17,21 +18,22 @@ import Data.List
 -- =============================================================================
 
 ||| Individual vote record
+||| Uses VoteDecision instead of Bool for richer context
 public export
 record Vote where
   constructor MkVote
   proposalId : ProposalId
   chainId    : ChainId
-  ouAddress  : EvmAddress
+  ouAddress  : ValidatedEvmAddress
   auditorId  : AuditorId
-  approve    : Bool            -- True = approve, False = reject
+  decision   : VoteDecision    -- Approval, rejection with reason, etc.
   timestamp  : Integer         -- IC timestamp
 
 public export
 Show Vote where
   show v = "Vote{proposal=" ++ show v.proposalId
         ++ ", auditor=" ++ show v.auditorId
-        ++ ", approve=" ++ show v.approve ++ "}"
+        ++ ", decision=" ++ show v.decision ++ "}"
 
 public export
 Eq Vote where
@@ -44,7 +46,7 @@ record VoteTally where
   constructor MkVoteTally
   proposalId     : ProposalId
   chainId        : ChainId
-  ouAddress      : EvmAddress
+  ouAddress      : ValidatedEvmAddress
   approveCount   : Integer
   rejectCount    : Integer
   requiredCount  : Integer     -- n in n-of-m
@@ -103,7 +105,7 @@ record ProposalVoteState where
   constructor MkProposalVoteState
   proposalId    : ProposalId
   chainId       : ChainId
-  ouAddress     : EvmAddress
+  ouAddress     : ValidatedEvmAddress
   assignedIds   : List AuditorId
   votes         : List Vote
   config        : VoteConfig
@@ -128,13 +130,13 @@ isAssigned aid state = any (\a => a == aid) state.assignedIds
 hasVoted : AuditorId -> ProposalVoteState -> Bool
 hasVoted aid state = any (\v => v.auditorId == aid) state.votes
 
-||| Count approvals
+||| Count approvals (uses VoteDecision.isApproval)
 countApprovals : List Vote -> Integer
-countApprovals = cast . length . filter (.approve)
+countApprovals = cast . length . filter (isApproval . (.decision))
 
-||| Count rejections
+||| Count rejections (uses VoteDecision.isRejection)
 countRejections : List Vote -> Integer
-countRejections = cast . length . filter (not . (.approve))
+countRejections = cast . length . filter (isRejection . (.decision))
 
 ||| Check threshold result
 public export
@@ -156,14 +158,15 @@ checkThreshold state now =
 
 ||| Submit a vote (called by Auditor via Candid)
 ||| Principal verification happens at canister entry point
+||| Now accepts VoteDecision for richer context (approval, rejection with reason, etc.)
 public export
 submitVote :
   ProposalVoteState ->
   AuditorId ->        -- Verified from caller Principal
-  Bool ->             -- approve
+  VoteDecision ->     -- Decision with optional reason
   Integer ->          -- currentTime
   FR ProposalVoteState
-submitVote state aid approve now =
+submitVote state aid decision now =
   -- Check not already decided
   case state.result of
     Just _ => fail Update "submitVote" "Voting already concluded"
@@ -180,7 +183,7 @@ submitVote state aid approve now =
                       (Conflict "Auditor already voted on this proposal")
             else
               -- Record vote
-              let vote = MkVote state.proposalId state.chainId state.ouAddress aid approve now
+              let vote = MkVote state.proposalId state.chainId state.ouAddress aid decision now
                   newVotes = vote :: state.votes
                   newState = { votes := newVotes } state
                   threshold = checkThreshold newState now
@@ -188,7 +191,7 @@ submitVote state aid approve now =
                     NotReached => newState
                     other      => { result := Just other } newState
               in ok Update "submitVote"
-                    ("Vote recorded: " ++ show aid ++ " -> " ++ show approve)
+                    ("Vote recorded: " ++ show aid ++ " -> " ++ show decision)
                     finalState
 
 ||| Get vote tally for a proposal
@@ -209,10 +212,10 @@ public export
 initVoteState :
   ProposalId ->
   ChainId ->
-  EvmAddress ->       -- OU contract address
-  List AuditorId ->   -- Assigned auditors
+  ValidatedEvmAddress ->  -- OU contract address
+  List AuditorId ->       -- Assigned auditors
   VoteConfig ->
-  Integer ->          -- currentTime
+  Integer ->              -- currentTime
   ProposalVoteState
 initVoteState pid cid ou auditors config now =
   MkProposalVoteState pid cid ou auditors [] config now Nothing

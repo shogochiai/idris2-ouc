@@ -12,6 +12,7 @@
 module OUC.Storages.StableMemory
 
 import OUC.Functions.Core
+import OUC.Types.Validated
 import OUC.Storages.State
 import Economics.Tier
 import Data.List
@@ -87,7 +88,7 @@ record CanisterState where
   auditors      : List Auditor
   nextAuditorId : Nat
   -- Proposals
-  proposals     : List UpgradeProposal
+  proposals     : List Proposal
   nextProposalId: Nat
   -- Economics (v2)
   subscription  : Maybe Subscription

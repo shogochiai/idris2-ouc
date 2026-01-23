@@ -3,6 +3,7 @@ module OUC.Tests.CoreTests
 
 import FRMonad.Core
 import OUC.Functions.Core
+import OUC.Types.Validated
 import Data.List
 
 %default covering
@@ -42,20 +43,20 @@ runTestSuite suiteName tests = do
 -- Test Helpers
 -- =============================================================================
 
-testPrincipal : ICPrincipal
-testPrincipal = MkICPrincipal "2vxsx-fae"
+testPrincipal : ValidatedPrincipal
+testPrincipal = unsafeMkPrincipal "2vxsx-fae"
 
 testChain : ChainId
 testChain = MkChainId 1
 
-testTarget : EvmAddress
-testTarget = MkEvmAddress "0x1234567890123456789012345678901234567890"
+testTarget : ValidatedEvmAddress
+testTarget = unsafeMkEvmAddress "1234567890123456789012345678901234567890"
 
-testNewImpl : EvmAddress
-testNewImpl = MkEvmAddress "0xabcdef0123456789abcdef0123456789abcdef01"
+testNewImpl : ValidatedEvmAddress
+testNewImpl = unsafeMkEvmAddress "abcdef0123456789abcdef0123456789abcdef01"
 
-testOU : EvmAddress
-testOU = MkEvmAddress "0xfedcba9876543210fedcba9876543210fedcba98"
+testOU : ValidatedEvmAddress
+testOU = unsafeMkEvmAddress "fedcba9876543210fedcba9876543210fedcba98"
 
 ||| Assert FR is Ok
 assertOk : Show a => FR a -> IO Bool
@@ -93,14 +94,14 @@ test_proposal_lifecycle = do
           putStrLn "Failed to find submitted proposal"
           pure False
         Ok proposal _ => do
-          if proposal.status /= Pending
+          if proposal.state /= SPending
             then do
-              putStrLn $ "Expected Pending but got " ++ show proposal.status
+              putStrLn $ "Expected SPending but got " ++ show proposal.state
               pure False
             else do
               -- Step 2: Assign auditor (UnderReview)
               let aid = MkAuditorId testPrincipal
-              case assignAuditor state1 pid aid (now + 1000) of
+              case assignAuditorToProposal state1 pid aid (now + 1000) of
                 Fail f _ => do
                   putStrLn $ "Failed to assign auditor: " ++ show f
                   pure False
@@ -108,9 +109,9 @@ test_proposal_lifecycle = do
                   case findProposal state2 pid of
                     Fail _ _ => pure False
                     Ok proposal2 _ => do
-                      if proposal2.status /= UnderReview
+                      if proposal2.state /= SUnderReview
                         then do
-                          putStrLn $ "Expected UnderReview but got " ++ show proposal2.status
+                          putStrLn $ "Expected SUnderReview but got " ++ show proposal2.state
                           pure False
                         else do
                           -- Step 3: Submit approval (Approved)
@@ -122,9 +123,9 @@ test_proposal_lifecycle = do
                               case findProposal state3 pid of
                                 Fail _ _ => pure False
                                 Ok proposal3 _ => do
-                                  if proposal3.status /= Approved
+                                  if proposal3.state /= SApproved
                                     then do
-                                      putStrLn $ "Expected Approved but got " ++ show proposal3.status
+                                      putStrLn $ "Expected SApproved but got " ++ show proposal3.state
                                       pure False
                                     else do
                                       -- Step 4: Mark executed
@@ -136,7 +137,7 @@ test_proposal_lifecycle = do
                                           case findProposal state4 pid of
                                             Fail _ _ => pure False
                                             Ok proposal4 _ =>
-                                              pure (proposal4.status == Executed)
+                                              pure (proposal4.state == SExecuted)
 
 -- =============================================================================
 -- OUC_PROP_002: Proposal IDs are unique and monotonically increasing
@@ -175,11 +176,11 @@ test_assign_non_pending_fails = do
     Fail _ _ => pure False
     Ok (state1, pid) _ =>
       -- First assign (should succeed)
-      case assignAuditor state1 pid aid now of
+      case assignAuditorToProposal state1 pid aid now of
         Fail _ _ => pure False
         Ok state2 _ =>
           -- Second assign should fail (status is UnderReview)
-          case assignAuditor state2 pid aid now of
+          case assignAuditorToProposal state2 pid aid now of
             Fail (InvalidState _) _ => pure True
             _ => pure False
 

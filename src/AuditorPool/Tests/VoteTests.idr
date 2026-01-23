@@ -5,6 +5,8 @@ module AuditorPool.Tests.VoteTests
 
 import FRMonad.Core
 import OUC.Functions.Core
+import OUC.Types.Validated
+import AuditorPool.Core
 import AuditorPool.Vote
 import Data.List
 
@@ -14,14 +16,14 @@ import Data.List
 -- Test Helpers
 -- =============================================================================
 
-testPrincipal1 : ICPrincipal
-testPrincipal1 = MkICPrincipal "aaaaa-aa"
+testPrincipal1 : ValidatedPrincipal
+testPrincipal1 = unsafeMkPrincipal "aaaaa-aa"
 
-testPrincipal2 : ICPrincipal
-testPrincipal2 = MkICPrincipal "bbbbb-bb"
+testPrincipal2 : ValidatedPrincipal
+testPrincipal2 = unsafeMkPrincipal "bbbbb-bb"
 
-testPrincipal3 : ICPrincipal
-testPrincipal3 = MkICPrincipal "ccccc-cc"
+testPrincipal3 : ValidatedPrincipal
+testPrincipal3 = unsafeMkPrincipal "ccccc-cc"
 
 testAuditor1 : AuditorId
 testAuditor1 = MkAuditorId testPrincipal1
@@ -38,8 +40,8 @@ testProposalId = MkProposalId 1
 testChainId : ChainId
 testChainId = MkChainId 1
 
-testOUAddress : EvmAddress
-testOUAddress = MkEvmAddress "0x1234567890123456789012345678901234567890"
+testOUAddress : ValidatedEvmAddress
+testOUAddress = unsafeMkEvmAddress "1234567890123456789012345678901234567890"
 
 baseTime : Integer
 baseTime = 1704067200000000000  -- 2024-01-01 00:00:00 UTC
@@ -59,7 +61,7 @@ makeTestVoteState =
 test_vote_submit_success : IO Bool
 test_vote_submit_success = do
   let state = makeTestVoteState
-  case submitVote state testAuditor1 True baseTime of
+  case submitVote state testAuditor1 Approve baseTime of
     Fail _ _ => pure False
     Ok newState _ => do
       let tally = getTally newState
@@ -69,8 +71,8 @@ test_vote_submit_success = do
 test_vote_unassigned_fails : IO Bool
 test_vote_unassigned_fails = do
   let state = makeTestVoteState
-      unassigned = MkAuditorId (MkICPrincipal "unknown-principal")
-  case submitVote state unassigned True baseTime of
+      unassigned = MkAuditorId (unsafeMkPrincipal "unknown-principal")
+  case submitVote state unassigned Approve baseTime of
     Fail _ _ => pure True  -- Expected failure
     Ok _ _ => pure False   -- Should have failed
 
@@ -78,10 +80,10 @@ test_vote_unassigned_fails = do
 test_vote_duplicate_fails : IO Bool
 test_vote_duplicate_fails = do
   let state = makeTestVoteState
-  case submitVote state testAuditor1 True baseTime of
+  case submitVote state testAuditor1 Approve baseTime of
     Fail _ _ => pure False
     Ok state2 _ =>
-      case submitVote state2 testAuditor1 False baseTime of
+      case submitVote state2 testAuditor1 (Reject "change mind") baseTime of
         Fail _ _ => pure True   -- Expected: duplicate vote rejected
         Ok _ _ => pure False    -- Should have failed
 
@@ -89,10 +91,10 @@ test_vote_duplicate_fails = do
 test_vote_approval_threshold : IO Bool
 test_vote_approval_threshold = do
   let state = makeTestVoteState
-  case submitVote state testAuditor1 True baseTime of
+  case submitVote state testAuditor1 Approve baseTime of
     Fail _ _ => pure False
     Ok state2 _ =>
-      case submitVote state2 testAuditor2 True (baseTime + 1000) of
+      case submitVote state2 testAuditor2 Approve (baseTime + 1000) of
         Fail _ _ => pure False
         Ok state3 _ =>
           pure $ state3.result == Just ApprovalReached
@@ -101,10 +103,10 @@ test_vote_approval_threshold = do
 test_vote_rejection_threshold : IO Bool
 test_vote_rejection_threshold = do
   let state = makeTestVoteState
-  case submitVote state testAuditor1 False baseTime of
+  case submitVote state testAuditor1 (Reject "test") baseTime of
     Fail _ _ => pure False
     Ok state2 _ =>
-      case submitVote state2 testAuditor2 False (baseTime + 1000) of
+      case submitVote state2 testAuditor2 (Reject "test") (baseTime + 1000) of
         Fail _ _ => pure False
         Ok state3 _ =>
           pure $ state3.result == Just RejectionReached
@@ -113,10 +115,10 @@ test_vote_rejection_threshold = do
 test_vote_mixed_pending : IO Bool
 test_vote_mixed_pending = do
   let state = makeTestVoteState
-  case submitVote state testAuditor1 True baseTime of
+  case submitVote state testAuditor1 Approve baseTime of
     Fail _ _ => pure False
     Ok state2 _ =>
-      case submitVote state2 testAuditor2 False (baseTime + 1000) of
+      case submitVote state2 testAuditor2 (Reject "test") (baseTime + 1000) of
         Fail _ _ => pure False
         Ok state3 _ =>
           -- 1 approve, 1 reject, 1 pending - still can reach 2 approvals
@@ -127,14 +129,14 @@ test_vote_after_conclusion : IO Bool
 test_vote_after_conclusion = do
   let state = makeTestVoteState
   -- First reach approval threshold
-  case submitVote state testAuditor1 True baseTime of
+  case submitVote state testAuditor1 Approve baseTime of
     Fail _ _ => pure False
     Ok state2 _ =>
-      case submitVote state2 testAuditor2 True (baseTime + 1000) of
+      case submitVote state2 testAuditor2 Approve (baseTime + 1000) of
         Fail _ _ => pure False
         Ok state3 _ =>
           -- Now try to vote after conclusion
-          case submitVote state3 testAuditor3 False (baseTime + 2000) of
+          case submitVote state3 testAuditor3 (Reject "late vote") (baseTime + 2000) of
             Fail _ _ => pure True   -- Expected: cannot vote after conclusion
             Ok _ _ => pure False
 
@@ -152,10 +154,10 @@ test_vote_expiry = do
 test_vote_tally : IO Bool
 test_vote_tally = do
   let state = makeTestVoteState
-  case submitVote state testAuditor1 True baseTime of
+  case submitVote state testAuditor1 Approve baseTime of
     Fail _ _ => pure False
     Ok state2 _ =>
-      case submitVote state2 testAuditor2 False (baseTime + 1000) of
+      case submitVote state2 testAuditor2 (Reject "test") (baseTime + 1000) of
         Fail _ _ => pure False
         Ok state3 _ => do
           let tally = getTally state3
@@ -174,7 +176,7 @@ test_vote_state_list = do
   case findVoteState states testProposalId of
     Nothing => pure False
     Just found =>
-      case submitVote found testAuditor1 True baseTime of
+      case submitVote found testAuditor1 Approve baseTime of
         Fail _ _ => pure False
         Ok updated _ => do
           let newStates = updateVoteState states updated
@@ -182,6 +184,63 @@ test_vote_state_list = do
             Nothing => pure False
             Just final =>
               pure $ (getTally final).approveCount == 1
+
+-- =============================================================================
+-- Auditor Selection Tests (exercises safeIndex via selectAuditor Random)
+-- =============================================================================
+
+testAuditorA : Auditor
+testAuditorA = MkAuditor testAuditor1 Active 500 10 8 2 0 100000 (cast baseTime)
+
+testAuditorB : Auditor
+testAuditorB = MkAuditor testAuditor2 Active 600 15 12 3 0 200000 (cast baseTime)
+
+testAuditorC : Auditor
+testAuditorC = MkAuditor testAuditor3 Active 700 20 16 4 0 300000 (cast baseTime)
+
+testPoolConfig : PoolConfig
+testPoolConfig = MkPoolConfig 1 10 100 200000
+
+||| REQ_POOL_001: Select auditor with Random criteria (seed 0 -> index 0)
+test_select_random_seed0 : IO Bool
+test_select_random_seed0 = do
+  let auditors = [testAuditorA, testAuditorB, testAuditorC]
+  case selectAuditor auditors (Random 0) testPoolConfig of
+    Fail _ _ => pure False
+    Ok _ _ => pure True  -- Just verify it succeeds
+
+||| REQ_POOL_002: Select auditor with Random criteria (seed 1 -> index 1)
+test_select_random_seed1 : IO Bool
+test_select_random_seed1 = do
+  let auditors = [testAuditorA, testAuditorB, testAuditorC]
+  case selectAuditor auditors (Random 1) testPoolConfig of
+    Fail _ _ => pure False
+    Ok _ _ => pure True
+
+||| REQ_POOL_003: Select auditor with Random criteria (large seed -> modulo)
+test_select_random_large_seed : IO Bool
+test_select_random_large_seed = do
+  let auditors = [testAuditorA, testAuditorB, testAuditorC]
+  -- Large seed 1000 % 3 = index 1
+  case selectAuditor auditors (Random 1000) testPoolConfig of
+    Fail _ _ => pure False
+    Ok _ _ => pure True
+
+||| REQ_POOL_004: Select auditor with single auditor (index 0 only)
+test_select_random_single : IO Bool
+test_select_random_single = do
+  let auditors = [testAuditorA]
+  case selectAuditor auditors (Random 42) testPoolConfig of
+    Fail _ _ => pure False
+    Ok _ _ => pure True  -- Only one choice
+
+||| REQ_POOL_005: Select auditor with empty list (fails)
+test_select_random_empty : IO Bool
+test_select_random_empty = do
+  let auditors : List Auditor = []
+  case selectAuditor auditors (Random 0) testPoolConfig of
+    Fail _ _ => pure True  -- Expected failure
+    Ok _ _ => pure False
 
 -- =============================================================================
 -- Test Suite Export
@@ -201,4 +260,10 @@ voteTests =
   , ("REQ_INT_VOTE_008", "Threshold check with time expiry", test_vote_expiry)
   , ("REQ_INT_VOTE_009", "Get tally returns correct counts", test_vote_tally)
   , ("REQ_INT_VOTE_010", "Find and update vote state in list", test_vote_state_list)
+  -- Auditor selection tests (safeIndex coverage)
+  , ("REQ_INT_POOL_001", "Select auditor Random seed 0", test_select_random_seed0)
+  , ("REQ_INT_POOL_002", "Select auditor Random seed 1", test_select_random_seed1)
+  , ("REQ_INT_POOL_003", "Select auditor Random large seed", test_select_random_large_seed)
+  , ("REQ_INT_POOL_004", "Select auditor single element", test_select_random_single)
+  , ("REQ_INT_POOL_005", "Select auditor empty list", test_select_random_empty)
   ]

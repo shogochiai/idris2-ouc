@@ -12,6 +12,7 @@ module OUC.Functions.Feedback
 
 import FRMonad.Core
 import OUC.Functions.Core
+import OUC.Types.Validated
 import Data.List
 import Data.Maybe
 
@@ -203,7 +204,7 @@ record FreezeRecord where
   proposalId     : ProposalId
   challenge      : ChallengeRecord
   frozenAt       : Nat
-  previousStatus : ProposalStatus
+  previousState  : ProposalState
   unfrozenAt     : Maybe Nat
 
 -- =============================================================================
@@ -299,11 +300,11 @@ export
 freezeProposal :
   FeedbackState ->
   ChallengeRecord ->
-  ProposalStatus ->
+  ProposalState ->
   Nat ->
   FeedbackState
-freezeProposal state challenge prevStatus timestamp =
-  let freeze = MkFreezeRecord challenge.proposalId challenge timestamp prevStatus Nothing
+freezeProposal state challenge prevState timestamp =
+  let freeze = MkFreezeRecord challenge.proposalId challenge timestamp prevState Nothing
   in { freezes := freeze :: state.freezes } state
 
 ||| Resolve challenge
@@ -341,7 +342,7 @@ export
 resumeProposal :
   FeedbackState ->
   ProposalId ->
-  FR ProposalStatus
+  FR ProposalState
 resumeProposal state pid =
   case find (\f => f.proposalId == pid) state.freezes of
     Nothing => notFound Query "resumeProposal" ("No freeze record for " ++ show pid)
@@ -352,26 +353,26 @@ resumeProposal state pid =
         Just _ =>
           -- Check if challenge was upheld
           case find (\c => c.proposalId == pid) state.challenges of
-            Nothing => ok Query "resumeProposal" "No challenge found" freeze.previousStatus
+            Nothing => ok Query "resumeProposal" "No challenge found" freeze.previousState
             Just challenge =>
               case challenge.state of
                 ChallengeResolved True =>
                   -- Challenge upheld: reverse the decision
                   ok Query "resumeProposal"
                      "Challenge upheld, reversing decision"
-                     (reverseStatus freeze.previousStatus)
+                     (reverseState freeze.previousState)
                 ChallengeResolved False =>
                   -- Challenge rejected: keep original decision
                   ok Query "resumeProposal"
                      "Challenge rejected, keeping decision"
-                     freeze.previousStatus
+                     freeze.previousState
                 _ => fail Query "resumeProposal" "Challenge not resolved"
                           (InvalidState "Challenge still pending")
   where
-    reverseStatus : ProposalStatus -> ProposalStatus
-    reverseStatus Approved = Rejected
-    reverseStatus Rejected = Approved
-    reverseStatus s = s
+    reverseState : ProposalState -> ProposalState
+    reverseState SApproved = SRejected
+    reverseState SRejected = SApproved
+    reverseState s = s
 
 -- =============================================================================
 -- Lineage Operations

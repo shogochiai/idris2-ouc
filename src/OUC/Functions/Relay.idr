@@ -12,6 +12,7 @@ module OUC.Functions.Relay
 
 import FRMonad.Core
 import OUC.Functions.Core
+import OUC.Types.Validated
 import HttpOutcall.Core
 import HttpOutcall.EvmRpc
 import HttpOutcall.TxSender
@@ -31,30 +32,37 @@ safeDiv10 n = divNatNZ n 10 ItIsSucc
 -- Decision Encoding
 -- =============================================================================
 
-||| Vote decision (matches OU contract)
+||| Relay decision (matches OU contract uint8)
 public export
-data VoteDecision
-  = Approve
-  | Reject
-  | RequestChanges
+data RelayDecision
+  = RelayApprove
+  | RelayReject
+  | RelayRequestChanges
 
 public export
-Show VoteDecision where
-  show Approve        = "Approve"
-  show Reject         = "Reject"
-  show RequestChanges = "RequestChanges"
+Show RelayDecision where
+  show RelayApprove        = "Approve"
+  show RelayReject         = "Reject"
+  show RelayRequestChanges = "RequestChanges"
 
 ||| Convert decision to uint8 for OU contract
-decisionToInt : VoteDecision -> Nat
-decisionToInt Approve        = 1
-decisionToInt Reject         = 2
-decisionToInt RequestChanges = 3
+decisionToInt : RelayDecision -> Nat
+decisionToInt RelayApprove        = 1
+decisionToInt RelayReject         = 2
+decisionToInt RelayRequestChanges = 3
 
-||| Convert ReviewDecision to VoteDecision
-reviewToVoteDecision : ReviewDecision -> VoteDecision
-reviewToVoteDecision ApproveUpgrade       = Approve
-reviewToVoteDecision (RejectUpgrade _)    = Reject
-reviewToVoteDecision (RequestChanges _)   = RequestChanges
+||| Convert ReviewDecision to RelayDecision
+reviewToRelayDecision : ReviewDecision -> RelayDecision
+reviewToRelayDecision ApproveUpgrade       = RelayApprove
+reviewToRelayDecision (RejectUpgrade _)    = RelayReject
+reviewToRelayDecision (RequestChanges _)   = RelayRequestChanges
+
+||| Convert VoteDecision to RelayDecision
+voteToRelayDecision : VoteDecision -> RelayDecision
+voteToRelayDecision Approve              = RelayApprove
+voteToRelayDecision (Reject _)           = RelayReject
+voteToRelayDecision (RequestChanges _)   = RelayRequestChanges
+voteToRelayDecision (Abstain _)          = RelayReject  -- Abstain treated as reject for contract
 
 -- =============================================================================
 -- Calldata Builders
@@ -97,7 +105,7 @@ encodeBytes32 s = SHex.stripHexPrefix s
 ||| castVote(uint256 proposalId, uint8 decision, bytes32 sigHash)
 public export
 partial
-buildCastVoteCalldata : Nat -> VoteDecision -> String -> FR String
+buildCastVoteCalldata : Nat -> RelayDecision -> String -> FR String
 buildCastVoteCalldata proposalId decision sigHash =
   if sigHash == ""
     then fail Update "buildCastVoteCalldata" "Empty signature"
@@ -166,7 +174,7 @@ relayVote :
   ChainTxConfig ->
   String ->           -- OU contract address
   Nat ->              -- proposalId
-  VoteDecision ->
+  RelayDecision ->
   String ->           -- signature hash
   Nat ->              -- nonce
   FR TxHash
@@ -283,18 +291,18 @@ getAssignedProposals state auditorId =
         ("Found " ++ show (length summaries) ++ " proposals for " ++ show auditorId)
         summaries
   where
-    isAssignedTo : AuditorId -> UpgradeProposal -> Bool
-    isAssignedTo aid prop = aid `elem` prop.assignedAuditors
+    isAssignedTo : AuditorId -> Proposal -> Bool
+    isAssignedTo aid prop = aid.principal `elem` prop.assignedAuditors
 
-    toSummary : UpgradeProposal -> ProposalSummary
+    toSummary : Proposal -> ProposalSummary
     toSummary p = MkProposalSummary
-      p.id.value  -- ProposalId.value is Nat
-      ("Upgrade to " ++ p.newImpl.hex)
-      ("Chain " ++ show p.chainId.value)
-      p.target.hex
-      p.newImpl.hex
+      p.proposalId
+      ("Upgrade to " ++ evmAddressHex p.newImpl)
+      ("Chain " ++ show p.chainId)
+      (evmAddressHex p.target)
+      (evmAddressHex p.newImpl)
       0  -- Would get from voting session
-      (show p.status)
+      (show p.state)
 
 ||| Submit vote for a proposal
 ||| Main entry point for auditors - hides all chain complexity
@@ -312,15 +320,16 @@ submitVote state auditorId proposalId decision sig = do
   proposal <- findProposal state proposalId
 
   -- Get chain config
-  case getChainConfig proposal.chainId.value of
+  let chainId = proposal.chainId
+  case getChainConfig chainId of
     Nothing => fail Update "submitVote"
-                    ("Unknown chain: " ++ show proposal.chainId.value)
+                    ("Unknown chain: " ++ show chainId)
                     (NotFound "Chain configuration not found")
     Just config => do
       -- Relay to OU
       -- Note: Would need to get OU address from proposal
-      let ouAddr = proposal.ou.hex
-      let voteDecision = reviewToVoteDecision decision
+      let ouAddr = evmAddressHex proposal.ou
+      let relayDecision = reviewToRelayDecision decision
 
       -- Hash the signature for on-chain storage
       let sigHash = sig  -- In real impl, would hash
@@ -328,7 +337,7 @@ submitVote state auditorId proposalId decision sig = do
       -- Get nonce (would need to track per-chain)
       let nonce = 0
 
-      result <- relayVote config ouAddr proposalId.value voteDecision sigHash nonce
+      result <- relayVote config ouAddr proposalId.value relayDecision sigHash nonce
 
       -- This will currently fail with "vetKey not implemented"
       -- When implemented, would return VoteSubmitted
