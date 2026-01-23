@@ -9,6 +9,14 @@ sourcedir = "src"
 
 modules = Util.StringHex
         , Util.StringCase
+        -- Validated Types (compile-time guarantees)
+        , OUC.Types.Validated.Address
+        , OUC.Types.Validated.Chain
+        , OUC.Types.Validated.Numbers
+        , OUC.Types.Validated.Vote
+        , OUC.Types.Validated.Proposal
+        , OUC.Types.Validated.Signature
+        , OUC.Types.Validated
         -- Candid Encoding
         , Candid.Interface
         , Candid.Hash
