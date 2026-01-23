@@ -151,6 +151,7 @@ UI から OUC の SQLite に繋がるクエリが呼べる状態にする。
 [2.1] UI indexer.js        ✅ Candid Actor + 新API追加
 [2.2] Model 型整合         ⚠️
 [2.3] View                 ✅
+[2.4] UI 統合テスト         ✅ @dfinity/agent から Candid 呼び出し成功
 ```
 
 ### 完了した作業
@@ -230,13 +231,17 @@ dfx canister call ouc getDashboardSummary '()' → (3 : nat)  # データ保持 
 
 ### 残タスク
 
-**UI 統合テスト**
-```
-[ ] idris2-ouc-ui から OUC Canister 経由でイベント取得
-[ ] Dashboard に実データ表示
+**UI 統合テスト** ✅ 完了
+```bash
+# Node.js から @dfinity/agent 経由で OUC Canister 呼び出し成功
+node test-ouc-api.mjs
+# getDashboardSummary(): 9
+# getOucEvents(10): 9
+# storeTestEvent(999, 1): 10
+# ✅ All API tests passed!
 ```
 
-**IC Mainnet デプロイ**
+**IC Mainnet デプロイ** (残タスク)
 ```
 [ ] cycles 確保
 [ ] dfx deploy --network ic
