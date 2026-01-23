@@ -48,6 +48,11 @@ extern int32_t ouc_c_get_result_i32(void);
 extern void ouc_reset_ffi(void);
 extern int64_t ouc_get_auditor_count(void);  /* Direct access for debugging */
 extern int64_t ouc_get_proposal_count(void);  /* C-backed proposal count */
+
+/* Forward declarations from sqlite_stable.c (SQLite persistence) */
+extern int sqlite_stable_save(uint32_t schema_version, uint64_t timestamp);
+extern int sqlite_stable_load(uint32_t* out_schema_version);
+extern int sqlite_stable_has_snapshot(void);
 extern int64_t ouc_inc_proposal_count(void);  /* Increment and return new ID */
 
 /* A-Life Economics: Protocol Account functions */
@@ -75,6 +80,11 @@ extern int32_t ouc_c_get_candid_len(void);
 #define CMD_SUBMIT_PROPOSAL    13
 /* Candid encoding commands (100+) */
 #define CMD_ENCODE_EVM_RPC     100
+/* Indexer commands (30+) - must match Main.idr */
+#define CMD_GET_OUC_EVENTS       30
+#define CMD_GET_PROPOSAL_EVENTS  31
+#define CMD_GET_DASHBOARD_SUMMARY 32
+#define CMD_STORE_TEST_EVENT     33
 
 /* Call Idris2 with a command and return the result */
 static int32_t call_idris2(int32_t cmd) {
@@ -91,6 +101,20 @@ static int32_t call_idris2_with_arg(int32_t cmd, int32_t arg1) {
     ouc_reset_ffi();
     ouc_c_set_arg_i32(0, cmd);
     ouc_c_set_arg_i32(1, arg1);
+    void* closure = __mainExpression_0();
+    idris2_trampoline(closure);
+    return ouc_c_get_result_i32();
+}
+
+/* Alias for clarity */
+#define call_idris2_1arg call_idris2_with_arg
+
+/* Call Idris2 with command and two arguments */
+static int32_t call_idris2_2arg(int32_t cmd, int32_t arg1, int32_t arg2) {
+    ouc_reset_ffi();
+    ouc_c_set_arg_i32(0, cmd);
+    ouc_c_set_arg_i32(1, arg1);
+    ouc_c_set_arg_i32(2, arg2);
     void* closure = __mainExpression_0();
     idris2_trampoline(closure);
     return ouc_c_get_result_i32();
@@ -358,17 +382,43 @@ void canister_init(void) {
 __attribute__((used, visibility("default"), export_name("canister_pre_upgrade")))
 void canister_pre_upgrade(void) {
     debug("OUC: canister_pre_upgrade");
-    /* TODO: Serialize OUCState to stable memory */
+
+    /* Save SQLite database to stable memory */
+    uint64_t timestamp = ic0_time();
+    int rc = sqlite_stable_save(1, timestamp);  /* schema_version = 1 */
+    if (rc == 0) {
+        debug("OUC: SQLite saved to stable memory");
+    } else {
+        debug("OUC: SQLite save failed");
+    }
 }
 
 __attribute__((used, visibility("default"), export_name("canister_post_upgrade")))
 void canister_post_upgrade(void) {
     debug("OUC: canister_post_upgrade");
-    /* Re-initialize state using CMD_INIT
-     * TODO: Deserialize OUCState from stable memory instead of reinitializing */
+
+    /* Try to restore SQLite from stable memory first */
+    if (sqlite_stable_has_snapshot()) {
+        debug("OUC: Found SQLite snapshot, restoring...");
+        uint32_t schema_version = 0;
+        int rc = sqlite_stable_load(&schema_version);
+        if (rc == 0) {
+            debug("OUC: SQLite restored from stable memory");
+            /* Still call CMD_INIT to initialize Idris2 state (non-SQLite parts) */
+            int32_t result = call_idris2(CMD_INIT);
+            if (result == 1) {
+                debug("OUC: post_upgrade state initialized");
+            }
+            return;
+        } else {
+            debug("OUC: SQLite restore failed, initializing fresh");
+        }
+    }
+
+    /* No snapshot or restore failed - initialize fresh */
     int32_t result = call_idris2(CMD_INIT);
     if (result == 1) {
-        debug("OUC: post_upgrade initialized state");
+        debug("OUC: post_upgrade initialized state (fresh)");
     } else {
         debug("OUC: post_upgrade state init failed");
     }
@@ -1613,6 +1663,90 @@ void canister_query_getProtocolCount(void) {
     reply_candid_nat((uint64_t)count);
 }
 
+/* =============================================================================
+ * EVM Event Indexer Query Methods (CMD 30-33)
+ * ============================================================================= */
+
+/* Get recent OUC events count */
+__attribute__((used, visibility("default"), export_name("canister_query getOucEvents")))
+void canister_query_getOucEvents(void) {
+    debug("OUC: getOucEvents");
+
+    /* Parse limit (nat) from Candid argument */
+    uint32_t arg_size = ic0_msg_arg_data_size();
+    if (arg_size < 5) {
+        reply_candid_nat(0);
+        return;
+    }
+
+    uint8_t arg_buf[64];
+    ic0_msg_arg_data_copy((int32_t)(uintptr_t)arg_buf, 0, arg_size < 64 ? arg_size : 64);
+
+    /* Simple nat parsing: skip DIDL header (4 bytes), read LEB128 nat */
+    uint64_t limit = 10;
+    if (arg_size > 4) {
+        limit = (uint64_t)arg_buf[4];  /* Simplified: single byte nat */
+    }
+
+    int32_t count = call_idris2_1arg(CMD_GET_OUC_EVENTS, (int32_t)limit);
+    reply_candid_nat((uint64_t)(count >= 0 ? count : 0));
+}
+
+/* Get events for a specific proposal */
+__attribute__((used, visibility("default"), export_name("canister_query getProposalEvents")))
+void canister_query_getProposalEvents(void) {
+    debug("OUC: getProposalEvents");
+
+    /* Parse proposalId (nat) from Candid argument */
+    uint32_t arg_size = ic0_msg_arg_data_size();
+    if (arg_size < 5) {
+        reply_candid_nat(0);
+        return;
+    }
+
+    uint8_t arg_buf[64];
+    ic0_msg_arg_data_copy((int32_t)(uintptr_t)arg_buf, 0, arg_size < 64 ? arg_size : 64);
+
+    uint64_t proposal_id = 0;
+    if (arg_size > 4) {
+        proposal_id = (uint64_t)arg_buf[4];  /* Simplified: single byte nat */
+    }
+
+    int32_t count = call_idris2_1arg(CMD_GET_PROPOSAL_EVENTS, (int32_t)proposal_id);
+    reply_candid_nat((uint64_t)(count >= 0 ? count : 0));
+}
+
+/* Get dashboard summary (total event count) */
+__attribute__((used, visibility("default"), export_name("canister_query getDashboardSummary")))
+void canister_query_getDashboardSummary(void) {
+    debug("OUC: getDashboardSummary");
+    int32_t count = call_idris2(CMD_GET_DASHBOARD_SUMMARY);
+    reply_candid_nat((uint64_t)(count >= 0 ? count : 0));
+}
+
+/* Store test event (for development/testing) */
+__attribute__((used, visibility("default"), export_name("canister_update storeTestEvent")))
+void canister_update_storeTestEvent(void) {
+    debug("OUC: storeTestEvent");
+
+    /* Parse blockNumber and eventType (nat, nat) from Candid argument */
+    uint32_t arg_size = ic0_msg_arg_data_size();
+    if (arg_size < 6) {
+        reply_candid_nat(0);
+        return;
+    }
+
+    uint8_t arg_buf[64];
+    ic0_msg_arg_data_copy((int32_t)(uintptr_t)arg_buf, 0, arg_size < 64 ? arg_size : 64);
+
+    /* Simplified parsing: skip DIDL header, read two single-byte nats */
+    uint64_t block_num = arg_size > 4 ? (uint64_t)arg_buf[4] : 1;
+    uint64_t event_type = arg_size > 5 ? (uint64_t)arg_buf[5] : 0;
+
+    int32_t new_count = call_idris2_2arg(CMD_STORE_TEST_EVENT, (int32_t)block_num, (int32_t)event_type);
+    reply_candid_nat((uint64_t)(new_count >= 0 ? new_count : 0));
+}
+
 /* Test method: Call eth_blockNumber via EVM RPC canister */
 __attribute__((used, visibility("default"), export_name("canister_update testEvmRpc")))
 void canister_update_testEvmRpc(void) {
@@ -2806,6 +2940,450 @@ void canister_update_pollContract(void) {
         err[len++] = '}';
         err[len] = '\0';
         g_batch_contract_idx = -1;
+        reply_candid_text(err);
+    }
+}
+
+/* =============================================================================
+ * EVM Event Fetching (eth_getLogs)
+ * ============================================================================= */
+
+/* Context for eth_getLogs callback */
+static uint64_t g_fetch_from_block = 0;
+static uint64_t g_fetch_to_block = 0;
+static char g_fetch_address[44] = {0};  /* Contract address to filter */
+
+/*
+ * Build eth_getLogs JSON-RPC request
+ */
+static int32_t build_eth_get_logs_json(char* buf, uint64_t from_block, uint64_t to_block,
+                                        const char* address) {
+    int32_t len = 0;
+    const char* p;
+
+    p = "{\"jsonrpc\":\"2.0\",\"method\":\"eth_getLogs\",\"params\":[{";
+    while (*p) buf[len++] = *p++;
+
+    /* fromBlock */
+    p = "\"fromBlock\":\"0x";
+    while (*p) buf[len++] = *p++;
+    /* Convert to hex */
+    char hex[20];
+    int hlen = 0;
+    uint64_t n = from_block;
+    if (n == 0) {
+        hex[hlen++] = '0';
+    } else {
+        while (n > 0) {
+            int d = n & 0xF;
+            hex[hlen++] = (d < 10) ? ('0' + d) : ('a' + d - 10);
+            n >>= 4;
+        }
+    }
+    for (int i = hlen - 1; i >= 0; i--) buf[len++] = hex[i];
+
+    /* toBlock */
+    p = "\",\"toBlock\":\"0x";
+    while (*p) buf[len++] = *p++;
+    hlen = 0;
+    n = to_block;
+    if (n == 0) {
+        hex[hlen++] = '0';
+    } else {
+        while (n > 0) {
+            int d = n & 0xF;
+            hex[hlen++] = (d < 10) ? ('0' + d) : ('a' + d - 10);
+            n >>= 4;
+        }
+    }
+    for (int i = hlen - 1; i >= 0; i--) buf[len++] = hex[i];
+    buf[len++] = '"';
+
+    /* address filter (optional) */
+    if (address && address[0]) {
+        p = ",\"address\":\"";
+        while (*p) buf[len++] = *p++;
+        for (int i = 0; address[i] && i < 42; i++) {
+            buf[len++] = address[i];
+        }
+        buf[len++] = '"';
+    }
+
+    p = "}],\"id\":1}";
+    while (*p) buf[len++] = *p++;
+    buf[len] = '\0';
+
+    return len;
+}
+
+/* Parse hex string to uint64 */
+static uint64_t parse_hex_uint64(const char* hex, int len) {
+    uint64_t result = 0;
+    int start = 0;
+    if (len >= 2 && hex[0] == '0' && (hex[1] == 'x' || hex[1] == 'X')) {
+        start = 2;
+    }
+    for (int i = start; i < len; i++) {
+        char c = hex[i];
+        int d;
+        if (c >= '0' && c <= '9') d = c - '0';
+        else if (c >= 'a' && c <= 'f') d = 10 + c - 'a';
+        else if (c >= 'A' && c <= 'F') d = 10 + c - 'A';
+        else break;
+        result = (result << 4) | d;
+    }
+    return result;
+}
+
+/* Parse a single log entry from JSON and store to SQLite via Idris2
+ * Returns: 1 if parsed successfully, 0 otherwise
+ *
+ * Expected log format:
+ * {"address":"0x...","topics":["0x...","0x..."...],"data":"0x...","blockNumber":"0x...","transactionHash":"0x...","logIndex":"0x..."}
+ */
+static int32_t parse_and_store_log(const char* log_start, int32_t log_len) {
+    /* Find key fields - simplified JSON parser */
+    const char* address = NULL;
+    int address_len = 0;
+    const char* topic0 = NULL;
+    int topic0_len = 0;
+    const char* block_num = NULL;
+    int block_num_len = 0;
+    const char* tx_hash = NULL;
+    int tx_hash_len = 0;
+
+    /* Search for "address":" */
+    for (int i = 0; i < log_len - 12; i++) {
+        if (log_start[i] == 'a' && log_start[i+1] == 'd' && log_start[i+2] == 'd' &&
+            log_start[i+3] == 'r' && log_start[i+4] == 'e' && log_start[i+5] == 's' &&
+            log_start[i+6] == 's' && log_start[i+7] == '"' && log_start[i+8] == ':' &&
+            log_start[i+9] == '"') {
+            address = &log_start[i+10];
+            for (int j = 0; i+10+j < log_len && log_start[i+10+j] != '"'; j++) {
+                address_len++;
+            }
+            break;
+        }
+    }
+
+    /* Search for "topics":["0x... */
+    for (int i = 0; i < log_len - 12; i++) {
+        if (log_start[i] == 't' && log_start[i+1] == 'o' && log_start[i+2] == 'p' &&
+            log_start[i+3] == 'i' && log_start[i+4] == 'c' && log_start[i+5] == 's' &&
+            log_start[i+6] == '"' && log_start[i+7] == ':' && log_start[i+8] == '[' &&
+            log_start[i+9] == '"') {
+            topic0 = &log_start[i+10];
+            for (int j = 0; i+10+j < log_len && log_start[i+10+j] != '"'; j++) {
+                topic0_len++;
+            }
+            break;
+        }
+    }
+
+    /* Search for "blockNumber":" */
+    for (int i = 0; i < log_len - 15; i++) {
+        if (log_start[i] == 'b' && log_start[i+1] == 'l' && log_start[i+2] == 'o' &&
+            log_start[i+3] == 'c' && log_start[i+4] == 'k' && log_start[i+5] == 'N' &&
+            log_start[i+6] == 'u' && log_start[i+7] == 'm' && log_start[i+8] == 'b' &&
+            log_start[i+9] == 'e' && log_start[i+10] == 'r' && log_start[i+11] == '"' &&
+            log_start[i+12] == ':' && log_start[i+13] == '"') {
+            block_num = &log_start[i+14];
+            for (int j = 0; i+14+j < log_len && log_start[i+14+j] != '"'; j++) {
+                block_num_len++;
+            }
+            break;
+        }
+    }
+
+    if (!address || !block_num) {
+        return 0;  /* Required fields missing */
+    }
+
+    /* Parse block number */
+    uint64_t block = parse_hex_uint64(block_num, block_num_len);
+
+    /* Store event via Idris2 (CMD_STORE_TEST_EVENT with parsed data)
+     * For now, use simple storage - real impl would pass full event data */
+    int32_t event_type = 0;  /* UpgradeProposed by default */
+    if (topic0 && topic0_len >= 10) {
+        /* Detect event type from topic0 prefix */
+        /* VoteCast: 0x8c0e... */
+        if (topic0[2] == '8' && topic0[3] == 'c') event_type = 1;
+        /* ProposalExecuted: 0x41c... */
+        else if (topic0[2] == '4' && topic0[3] == '1') event_type = 2;
+    }
+
+    /* Call Idris2 to store event */
+    call_idris2_2arg(CMD_STORE_TEST_EVENT, (int32_t)block, event_type);
+
+    return 1;
+}
+
+/* Parse eth_getLogs response and store events */
+static int32_t parse_and_store_logs(const char* json, int32_t len) {
+    int32_t events_stored = 0;
+
+    /* Find "result":[ array start */
+    int result_start = -1;
+    for (int i = 0; i < len - 10; i++) {
+        if (json[i] == '"' && json[i+1] == 'r' && json[i+2] == 'e' &&
+            json[i+3] == 's' && json[i+4] == 'u' && json[i+5] == 'l' &&
+            json[i+6] == 't' && json[i+7] == '"' && json[i+8] == ':' &&
+            json[i+9] == '[') {
+            result_start = i + 10;
+            break;
+        }
+    }
+
+    if (result_start < 0) {
+        return 0;  /* No result array found */
+    }
+
+    /* Parse each log object in the array */
+    int brace_count = 0;
+    int log_start = -1;
+
+    for (int i = result_start; i < len; i++) {
+        if (json[i] == '{') {
+            if (brace_count == 0) {
+                log_start = i;
+            }
+            brace_count++;
+        } else if (json[i] == '}') {
+            brace_count--;
+            if (brace_count == 0 && log_start >= 0) {
+                /* Found complete log object */
+                int log_len = i - log_start + 1;
+                if (parse_and_store_log(&json[log_start], log_len)) {
+                    events_stored++;
+                }
+                log_start = -1;
+            }
+        } else if (json[i] == ']' && brace_count == 0) {
+            break;  /* End of result array */
+        }
+    }
+
+    return events_stored;
+}
+
+/* Callback for eth_getLogs response */
+__attribute__((used, visibility("default"), export_name("fetch_logs_reply_callback")))
+void fetch_logs_reply_callback(int32_t env) {
+    (void)env;
+    debug("OUC: fetch_logs_reply_callback");
+
+    /* Read response Candid */
+    int32_t arg_size = ic0_msg_arg_data_size();
+    static uint8_t response_buf[8192];
+    if (arg_size > (int32_t)sizeof(response_buf)) arg_size = sizeof(response_buf);
+    if (arg_size > 0) {
+        ic0_msg_arg_data_copy((int32_t)(uintptr_t)response_buf, 0, arg_size);
+    }
+
+    /* Find JSON in response */
+    char result[1024];
+    int len = 0;
+    int32_t events_stored = 0;
+
+    for (int32_t i = 10; i < arg_size - 10; i++) {
+        if (response_buf[i] == '{' && response_buf[i+1] == '"') {
+            /* Found JSON start - extract and parse logs */
+            int brace_count = 0;
+            int json_start = i;
+            int json_end = i;
+
+            for (int32_t j = i; j < arg_size; j++) {
+                if (response_buf[j] == '{') brace_count++;
+                if (response_buf[j] == '}') {
+                    brace_count--;
+                    if (brace_count == 0) {
+                        json_end = j;
+                        break;
+                    }
+                }
+            }
+
+            /* Parse and store logs */
+            events_stored = parse_and_store_logs((const char*)&response_buf[json_start],
+                                                  json_end - json_start + 1);
+            break;
+        }
+    }
+
+    /* Build response */
+    const char* prefix = "{\"fromBlock\":";
+    const char* p = prefix;
+    while (*p) result[len++] = *p++;
+
+    /* Add from block */
+    char num[20];
+    int nlen = 0;
+    uint64_t n = g_fetch_from_block;
+    if (n == 0) num[nlen++] = '0';
+    else {
+        while (n > 0) { num[nlen++] = '0' + (n % 10); n /= 10; }
+    }
+    for (int i = nlen - 1; i >= 0; i--) result[len++] = num[i];
+
+    p = ",\"toBlock\":";
+    while (*p) result[len++] = *p++;
+    nlen = 0;
+    n = g_fetch_to_block;
+    if (n == 0) num[nlen++] = '0';
+    else {
+        while (n > 0) { num[nlen++] = '0' + (n % 10); n /= 10; }
+    }
+    for (int i = nlen - 1; i >= 0; i--) result[len++] = num[i];
+
+    p = ",\"eventsStored\":";
+    while (*p) result[len++] = *p++;
+    nlen = 0;
+    n = events_stored;
+    if (n == 0) num[nlen++] = '0';
+    else {
+        while (n > 0) { num[nlen++] = '0' + (n % 10); n /= 10; }
+    }
+    for (int i = nlen - 1; i >= 0; i--) result[len++] = num[i];
+
+    result[len++] = '}';
+    result[len] = '\0';
+
+    reply_candid_text(result);
+}
+
+/* Callback for eth_getLogs rejection */
+__attribute__((used, visibility("default"), export_name("fetch_logs_reject_callback")))
+void fetch_logs_reject_callback(int32_t env) {
+    (void)env;
+    debug("OUC: fetch_logs_reject_callback");
+
+    int32_t reject_code = ic0_msg_reject_code();
+    char response[256];
+    int32_t len = 0;
+    const char* p = "{\"error\":\"fetch_logs_rejected\",\"code\":";
+    while (*p) response[len++] = *p++;
+    if (reject_code >= 10) response[len++] = '0' + (reject_code / 10);
+    response[len++] = '0' + (reject_code % 10);
+    response[len++] = '}';
+    response[len] = '\0';
+
+    reply_candid_text(response);
+}
+
+/*
+ * Fetch EVM logs for a block range
+ *
+ * Arguments (Candid): (fromBlock : nat64, toBlock : nat64, address : opt text) -> (text)
+ * Returns JSON: {"fromBlock":N,"toBlock":M,"eventsStored":K}
+ */
+__attribute__((used, visibility("default"), export_name("canister_update fetchEvmLogs")))
+void canister_update_fetchEvmLogs(void) {
+    debug("OUC: fetchEvmLogs");
+
+    load_candid_args();
+
+    /* Parse arguments: (nat64, nat64, opt text) */
+    /* Skip DIDL header and type table */
+    int32_t offset = 4;
+    int32_t new_offset;
+
+    uint64_t type_count = parse_leb128(offset, &new_offset);
+    offset = new_offset;
+    for (uint64_t i = 0; i < type_count; i++) {
+        parse_leb128(offset, &new_offset);
+        offset = new_offset;
+    }
+
+    /* Parse arg count */
+    uint64_t arg_count = parse_leb128(offset, &new_offset);
+    offset = new_offset;
+    if (arg_count < 2) {
+        reply_candid_text("{\"error\":\"need_at_least_2_args\"}");
+        return;
+    }
+
+    /* Skip type codes */
+    offset += (int32_t)arg_count;
+
+    /* Parse fromBlock (nat64 = 8 bytes little-endian) */
+    if (offset + 8 > arg_buf_size) {
+        reply_candid_text("{\"error\":\"invalid_fromBlock\"}");
+        return;
+    }
+    g_fetch_from_block = 0;
+    for (int i = 0; i < 8; i++) {
+        g_fetch_from_block |= ((uint64_t)arg_buf[offset + i]) << (i * 8);
+    }
+    offset += 8;
+
+    /* Parse toBlock (nat64 = 8 bytes little-endian) */
+    if (offset + 8 > arg_buf_size) {
+        reply_candid_text("{\"error\":\"invalid_toBlock\"}");
+        return;
+    }
+    g_fetch_to_block = 0;
+    for (int i = 0; i < 8; i++) {
+        g_fetch_to_block |= ((uint64_t)arg_buf[offset + i]) << (i * 8);
+    }
+    offset += 8;
+
+    /* Parse optional address (opt text) */
+    g_fetch_address[0] = '\0';
+    if (offset < arg_buf_size) {
+        uint8_t opt_tag = arg_buf[offset++];
+        if (opt_tag == 1 && offset < arg_buf_size) {
+            /* Some - parse text length and content */
+            uint64_t text_len = parse_leb128(offset, &new_offset);
+            offset = new_offset;
+            if (text_len > 0 && text_len < 43 && offset + text_len <= arg_buf_size) {
+                for (uint64_t i = 0; i < text_len; i++) {
+                    g_fetch_address[i] = (char)arg_buf[offset + i];
+                }
+                g_fetch_address[text_len] = '\0';
+            }
+        }
+    }
+
+    /* Build eth_getLogs JSON-RPC */
+    static char json_buf[512];
+    build_eth_get_logs_json(json_buf, g_fetch_from_block, g_fetch_to_block,
+                            g_fetch_address[0] ? g_fetch_address : NULL);
+
+    /* Build Candid for EVM RPC request using Idris2 */
+    int32_t candid_len = encode_evm_rpc_idris2(json_buf, 1 /* EthMainnet */, 8000);
+    if (candid_len < 0) {
+        reply_candid_text("{\"error\":\"candid_encoding_failed\"}");
+        return;
+    }
+    uint8_t* candid_buf = ouc_c_get_candid_buf();
+
+    /* Setup call to EVM RPC canister */
+    const char* method = "request";
+
+    typedef void (*callback_fn)(int32_t);
+    callback_fn reply_cb = fetch_logs_reply_callback;
+    callback_fn reject_cb = fetch_logs_reject_callback;
+
+    ic0_call_new(
+        (int32_t)(uintptr_t)EVM_RPC_CANISTER_ID, EVM_RPC_CANISTER_ID_LEN,
+        (int32_t)(uintptr_t)method, (int32_t)strlen(method),
+        (int32_t)(uintptr_t)reply_cb, 0,
+        (int32_t)(uintptr_t)reject_cb, 0
+    );
+
+    ic0_call_data_append((int32_t)(uintptr_t)candid_buf, candid_len);
+    ic0_call_cycles_add128(0, 20000000000ULL);  /* 20B cycles for larger response */
+
+    int32_t result = ic0_call_perform();
+    if (result != 0) {
+        char err[64];
+        int len = 0;
+        const char* p = "{\"error\":\"call_failed\",\"code\":";
+        while (*p) err[len++] = *p++;
+        err[len++] = '0' + (result % 10);
+        err[len++] = '}';
+        err[len] = '\0';
         reply_candid_text(err);
     }
 }

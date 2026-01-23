@@ -90,3 +90,12 @@ void idris2_putStr(char *s) {
     /* On IC, we could call ic0_debug_print here for debugging,
      * but for production we just ignore the output */
 }
+
+/*
+ * Emscripten Memory Growth Hook
+ * Called when WebAssembly memory grows. IC doesn't need this notification.
+ */
+void emscripten_notify_memory_growth(int32_t memory_index) {
+    (void)memory_index;
+    /* No-op on IC */
+}

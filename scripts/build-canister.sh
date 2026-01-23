@@ -47,6 +47,7 @@ if command -v pack >/dev/null 2>&1; then
         --build-dir "$BUILD_DIR/idris" \
         -p contrib \
         -p idris2-cdk \
+        -p icp-indexer \
         --source-dir src \
         -o main \
         src/Main.idr 2>&1 || {
@@ -59,6 +60,7 @@ else
         --build-dir "$BUILD_DIR/idris" \
         -p contrib \
         -p idris2-cdk \
+        -p icp-indexer \
         --source-dir src \
         -o main \
         src/Main.idr 2>&1 || {
@@ -172,6 +174,22 @@ C_INCLUDE="$REFC_SRC"
 REFC_C_FILES="$REFC_SRC/runtime.c $REFC_SRC/memoryManagement.c $REFC_SRC/stringOps.c $REFC_SRC/mathFunctions.c $REFC_SRC/casts.c $REFC_SRC/prim.c $REFC_SRC/refc_util.c"
 
 # =============================================================================
+# Step 2.5: Locate SQLite WASI from icp-indexer
+# =============================================================================
+echo ">>> Step 2.5: Prepare SQLite WASI"
+
+# icp-indexer provides SQLite WASI prebuilt library
+INDEXER_IC0="$PROJECT_DIR/../idris2-icp-indexer/lib/ic0"
+SQLITE_DIR="$INDEXER_IC0/sqlite"
+
+if [ ! -f "$SQLITE_DIR/libsqlite3.a" ]; then
+    echo "ERROR: SQLite WASI library not found at $SQLITE_DIR/libsqlite3.a"
+    echo "Please ensure idris2-icp-indexer is set up with SQLite WASI."
+    exit 1
+fi
+echo "SQLite WASI: $SQLITE_DIR"
+
+# =============================================================================
 # Step 3: Compile C → WASM (Emscripten)
 # =============================================================================
 echo ">>> Step 3: C → WASM (Emscripten)"
@@ -179,21 +197,47 @@ echo ">>> Step 3: C → WASM (Emscripten)"
 # IMPORTANT: mini-gmp must be included BEFORE refc headers since _datatypes.h includes <gmp.h>
 # Clear CPATH/CPLUS_INCLUDE_PATH to avoid macOS SDK C++ header conflicts with Emscripten
 # Use -include to force-include FFI header before Idris2-generated code (which lacks #include for FFI functions)
+# SQLite compile flags for real SQLite WASI implementation (not stub)
+SQLITE_FLAGS="-DSQLITE_THREADSAFE=0 \
+    -DSQLITE_OMIT_LOAD_EXTENSION \
+    -DSQLITE_OMIT_DEPRECATED \
+    -DSQLITE_OMIT_PROGRESS_CALLBACK \
+    -DSQLITE_OMIT_SHARED_CACHE \
+    -DSQLITE_DEFAULT_MEMSTATUS=0 \
+    -DSQLITE_DQS=0 \
+    -DSQLITE_ENABLE_DESERIALIZE"
+
+echo "Linking SQLite WASI library: $SQLITE_DIR/libsqlite3.a"
+echo "C files from icp-indexer: sqlite_bridge.c, sqlite_stable.c, wasi_polyfill.c, ic_http_outcall.c"
+
 CPATH= CPLUS_INCLUDE_PATH= emcc "$C_FILE" \
     $REFC_C_FILES \
     "$MINI_GMP/mini-gmp.c" \
     "$IC0_SUPPORT/ic0_stubs.c" \
     "$IC0_SUPPORT/canister_entry.c" \
     "$IC0_SUPPORT/wasi_stubs.c" \
+    "$IC0_SUPPORT/ic_ffi_bridge.c" \
+    "$INDEXER_IC0/sqlite_bridge.c" \
+    "$INDEXER_IC0/sqlite_stable.c" \
+    "$INDEXER_IC0/wasi_polyfill.c" \
+    "$INDEXER_IC0/ic_http_outcall.c" \
+    "$SQLITE_DIR/libsqlite3.a" \
     -include "$IC0_SUPPORT/ic0_ouc_ffi.h" \
+    -include "$INDEXER_IC0/sqlite_bridge.h" \
+    -include "$INDEXER_IC0/ic_http_outcall.h" \
     -I"$MINI_GMP" \
     -I"$REFC_INCLUDE" \
     -I"$C_INCLUDE" \
     -I"$IC0_SUPPORT" \
+    -I"$INDEXER_IC0" \
+    -I"$SQLITE_DIR" \
+    $SQLITE_FLAGS \
     -o "$BUILD_DIR/ouc.wasm" \
     -s STANDALONE_WASM=1 \
     -s FILESYSTEM=0 \
     -s ERROR_ON_UNDEFINED_SYMBOLS=0 \
+    -s TOTAL_MEMORY=268435456 \
+    -s ALLOW_MEMORY_GROWTH=1 \
     --no-entry \
     -O2 \
     -g2 \

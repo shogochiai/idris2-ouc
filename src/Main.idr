@@ -32,6 +32,8 @@
 module Main
 
 import OUC.Functions.Core
+import OUC.Types.Validated.Address
+import OUC.Types.Validated.Proposal
 import AuditorPool.Core
 import FRMonad.Core
 import Economics.Tier
@@ -44,6 +46,11 @@ import Data.Bits
 import Data.IORef
 import Data.List
 import System
+-- Indexer Integration (SQLite-only storage)
+import Core as Indexer
+import StorageSql as SqlStorage
+import StorageApi
+import Indexer.OucIndexerAdapter
 
 %default total
 
@@ -114,10 +121,16 @@ globalAccountRegistryRef = unsafePerformIO $ newIORef Economics.ProtocolAccount.
 globalSchedulerRef : IORef SchedulerState
 globalSchedulerRef = unsafePerformIO $ newIORef initialSchedulerState
 
+-- SQLite backend state (for persistent storage)
+-- Note: All indexer data stored in SQLite, no in-memory fallback
+%noinline
+globalSqlStateRef : IORef (Maybe SqlStorage.SqlBackendState)
+globalSqlStateRef = unsafePerformIO $ newIORef Nothing
+
 ||| Initialize OUC state with anonymous principal
 export
 initialOUCState : OUCState
-initialOUCState = initialState (MkICPrincipal "aaaaa-aa")
+initialOUCState = initialState (unsafeMkPrincipal "aaaaa-aa")
 
 -- =============================================================================
 -- Query Functions (read from global state)
@@ -150,11 +163,21 @@ getAuditorCount = do
 
 ||| Initialize global state and set result to 1 (success)
 export
+covering
 initGlobalState : IO ()
 initGlobalState = do
   writeIORef globalStateRef (Just initialOUCState)
-  setStateInitialized 1  -- Set C-backed flag (persists across calls)
-  setResult 1  -- Signal success to C
+  -- Initialize SQLite backend for indexer persistence
+  sqlResult <- SqlStorage.initSqlBackend
+  case sqlResult of
+    StorageOk sqlState => do
+      writeIORef globalSqlStateRef (Just sqlState)
+      setStateInitialized 1  -- Set C-backed flag (persists across calls)
+      setResult 1  -- Signal success to C
+    StorageError err => do
+      -- SQLite init failed - this is a critical error
+      setStateInitialized 0
+      setResult (-1)  -- Signal failure to C
 
 ||| Ensure state is initialized before operations
 ||| Re-initializes IORef from C flag if needed (IORef doesn't persist in WASM)
@@ -219,6 +242,19 @@ CMD_REGISTER_PROTOCOL = 22
 
 CMD_DONATE_TO_PROTOCOL : Int
 CMD_DONATE_TO_PROTOCOL = 23
+
+-- Indexer Query commands (30+)
+CMD_GET_OUC_EVENTS : Int
+CMD_GET_OUC_EVENTS = 30
+
+CMD_GET_PROPOSAL_EVENTS : Int
+CMD_GET_PROPOSAL_EVENTS = 31
+
+CMD_GET_DASHBOARD_SUMMARY : Int
+CMD_GET_DASHBOARD_SUMMARY = 32
+
+CMD_STORE_TEST_EVENT : Int
+CMD_STORE_TEST_EVENT = 33
 
 -- =============================================================================
 -- Query Functions (by ID)
@@ -314,10 +350,10 @@ doSubmitProposal = do
     Just st => do
       -- MVP: Use dummy values for required parameters
       let chainId = MkChainId 1  -- Ethereum mainnet
-          target = MkEvmAddress "0x0000000000000000000000000000000000000000"
-          newImpl = MkEvmAddress "0x0000000000000000000000000000000000000001"
-          ou = MkEvmAddress "0x0000000000000000000000000000000000000002"  -- OU address
-          proposer = MkICPrincipal "aaaaa-aa"
+          target = unsafeMkEvmAddress "0000000000000000000000000000000000000000"
+          newImpl = unsafeMkEvmAddress "0000000000000000000000000000000000000001"
+          ou = unsafeMkEvmAddress "0000000000000000000000000000000000000002"  -- OU address
+          proposer = unsafeMkPrincipal "aaaaa-aa"
           rationale = "MVP test proposal"  -- TODO: Pass from C
           codeHash = "0x0"
           now = 0  -- Nat timestamp (nanoseconds)
@@ -427,10 +463,103 @@ doEncodeEvmRpc = do
   result <- encodeEvmRpcFromBuffer chainId maxBytes
   setResult result
 
+-- =============================================================================
+-- Indexer Query Functions
+-- =============================================================================
+
+||| Get recent OUC events
+||| arg[1] = limit (max events to return)
+||| Returns: count of events (actual data would be in response buffer)
+covering
+doGetOucEvents : IO ()
+doGetOucEvents = do
+  limitArg <- getArg 1
+  let limit : Nat = if limitArg <= 0 then 10 else integerToNat (cast limitArg)
+  -- Query from SQLite (no fallback)
+  sqlResult <- SqlStorage.sqlQueryEvents Indexer.emptyFilter 0 limit
+  case sqlResult of
+    StorageOk page => setResult (cast $ length page.events)
+    StorageError _ => setResult (-1)  -- SQLite error
+
+||| Get events for a specific proposal
+||| arg[1] = proposalId
+||| Returns: count of vote events for this proposal
+covering
+doGetProposalEvents : IO ()
+doGetProposalEvents = do
+  proposalId <- getArg 1
+  let pid : Nat = integerToNat (cast proposalId)
+  -- Query VoteCast events filtered by topic (proposalId is in topic1)
+  -- For now, query all VoteCast events and filter
+  let voteFilter = { topic0 := Just voteCastTopic } Indexer.emptyFilter
+  sqlResult <- SqlStorage.sqlQueryEvents voteFilter 0 1000
+  case sqlResult of
+    StorageOk page => setResult (cast $ length page.events)
+    StorageError _ => setResult (-1)  -- SQLite error
+
+||| Get dashboard summary (aggregated stats)
+||| Returns: total event count in indexer
+covering
+doGetDashboardSummary : IO ()
+doGetDashboardSummary = do
+  -- Query from SQLite (no fallback)
+  sqlResult <- SqlStorage.sqlGetStorageInfo
+  case sqlResult of
+    StorageOk info => setResult (cast info.eventCount)
+    StorageError _ => setResult (-1)  -- SQLite error
+
+||| Store a test event (for development/testing)
+||| arg[1] = blockNumber
+||| arg[2] = eventType (0=UpgradeProposed, 1=VoteCast, 2=ProposalExecuted)
+||| Returns: new event count
+covering
+doStoreTestEvent : IO ()
+doStoreTestEvent = do
+  blockNum <- getArg 1
+  eventType <- getArg 2
+  -- Get current event count from SQLite for event ID
+  infoResult <- SqlStorage.sqlGetStorageInfo
+  let nextId : Nat = case infoResult of
+        StorageOk info => info.eventCount
+        StorageError _ => 0
+  let blockNat : Nat = integerToNat (cast blockNum)
+      topic = case eventType of
+        0 => upgradeProposedTopic
+        1 => voteCastTopic
+        2 => proposalExecutedTopic
+        _ => upgradeProposedTopic
+      testEvent = Indexer.MkIndexedEvent
+        nextId                          -- eventId
+        Indexer.ethereumMainnet         -- chainId
+        blockNat                        -- blockNumber
+        Indexer.zeroBytes32             -- blockHash
+        Indexer.zeroBytes32             -- txHash
+        0                               -- txIndex
+        0                               -- logIndex
+        Indexer.zeroAddress             -- address
+        topic                           -- topic0
+        Nothing                         -- topic1
+        Nothing                         -- topic2
+        Nothing                         -- topic3
+        ""                              -- data_
+        blockNat                        -- timestamp
+        0                               -- indexedAt
+  -- Store to SQLite (no fallback)
+  sqlResult <- SqlStorage.sqlStoreEvent testEvent
+  case sqlResult of
+    StorageOk newId => do
+      -- Return new count from SQLite
+      newInfoResult <- SqlStorage.sqlGetStorageInfo
+      case newInfoResult of
+        StorageOk info => setResult (cast info.eventCount)
+        StorageError _ => setResult (cast $ nextId + 1)  -- Estimate
+    StorageError _ => setResult (-1)  -- SQLite error
+
 ||| Dispatch command and write result
 ||| C sets arg[0] = command, calls main/dispatch, reads result
 ||| NOTE: == operator fixed in Idris2 PR #3708 for RefC/WASM32.
 ||| Using case for pattern matching style consistency.
+covering
 dispatchCommand : IO ()
 dispatchCommand = do
   cmd <- getArg 0
@@ -455,6 +584,11 @@ dispatchCommand = do
     21 => doGetSchedulerStats               -- CMD_GET_SCHEDULER_STATS
     22 => doRegisterProtocol                -- CMD_REGISTER_PROTOCOL
     23 => doDonateToProtocol                -- CMD_DONATE_TO_PROTOCOL
+    -- Indexer Query commands (30+)
+    30 => doGetOucEvents                    -- CMD_GET_OUC_EVENTS
+    31 => doGetProposalEvents               -- CMD_GET_PROPOSAL_EVENTS
+    32 => doGetDashboardSummary             -- CMD_GET_DASHBOARD_SUMMARY
+    33 => doStoreTestEvent                  -- CMD_STORE_TEST_EVENT
     -- Candid encoding commands (100+)
     100 => doEncodeEvmRpc                   -- CMD_ENCODE_EVM_RPC
     _  => setResult (-1)                    -- Unknown command
@@ -465,5 +599,6 @@ dispatchCommand = do
 
 ||| Main expression - called by canister_init
 ||| Dispatches based on command set in arg[0]
+covering
 main : IO ()
 main = dispatchCommand

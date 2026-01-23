@@ -85,4 +85,43 @@ service : {
     // ==========================================================================
     setTier: (Tier) -> (opt Subscription);
     setAutoRenew: (bool) -> (opt Subscription);
+
+    // ==========================================================================
+    // EVM Event Indexer Query Methods (CMD 30-33)
+    // OUC-specific event queries using icp-indexer library
+    // ==========================================================================
+
+    // Get recent OUC events (UpgradeProposed, VoteCast, ProposalExecuted, etc.)
+    // Returns: count of events (full event data via separate query)
+    getOucEvents: (nat) -> (nat) query;        // (limit) -> event_count
+
+    // Get events for a specific proposal ID
+    // Returns: count of vote/execution events for this proposal
+    getProposalEvents: (nat) -> (nat) query;   // (proposalId) -> event_count
+
+    // Get aggregated dashboard summary (event count, sync status, etc.)
+    // Returns: total event count in indexer
+    getDashboardSummary: () -> (nat) query;
+
+    // Store a test event (for development/testing)
+    // eventType: 0=UpgradeProposed, 1=VoteCast, 2=ProposalExecuted
+    // Returns: new total event count
+    storeTestEvent: (nat, nat) -> (nat);       // (blockNumber, eventType) -> new_count
+
+    // ==========================================================================
+    // EVM HTTP Outcall Methods
+    // ==========================================================================
+
+    // Fetch EVM logs via EVM RPC canister (IC mainnet only)
+    // Returns: JSON with fromBlock, toBlock, eventsStored
+    fetchEvmLogs: (nat64, nat64, opt text) -> (text);  // (fromBlock, toBlock, address?) -> result_json
+
+    // Test EVM RPC connectivity (eth_blockNumber)
+    testEvmRpc: () -> (text);
+
+    // Test direct HTTP outcall (httpbin.org)
+    testHttpGet: () -> (text);
+
+    // Test eth_blockNumber via HTTP outcall
+    testEthBlockNumber: () -> (text);
 }

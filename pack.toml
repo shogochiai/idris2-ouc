@@ -37,6 +37,16 @@ url  = "https://github.com/shogochiai/idris2-ouf"
 commit = "6b9f181cb1f32db6d6b6557983d9ac1e48be2451"
 ipkg = "idris2-ouf.ipkg"
 
+[custom.all.idris2-wasm]
+type = "local"
+path = "/Users/bob/code/idris2-wasm"
+ipkg = "idris2-wasm.ipkg"
+
+[custom.all.icp-indexer]
+type = "local"
+path = "/Users/bob/code/idris2-icp-indexer"
+ipkg = "icp-indexer.ipkg"
+
 [custom.all.ouc]
 type = "local"
 path = "."
