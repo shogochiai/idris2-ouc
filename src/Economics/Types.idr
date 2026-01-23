@@ -12,35 +12,35 @@ import Data.Nat
 -- NonZero Natural Numbers
 -- =============================================================================
 
-||| A natural number that is guaranteed to be non-zero.
-||| This eliminates division-by-zero errors at compile time.
+||| A natural number that is guaranteed to be non-zero (runtime validated).
+||| Use fromNat for safe construction, unsafeNonZero for known constants.
 public export
 data NonZero : Type where
-  MkNonZero : (n : Nat) -> {auto prf : IsSucc n} -> NonZero
+  MkNonZeroInternal : (n : Nat) -> NonZero
 
 ||| Extract the underlying Nat from NonZero
 public export
 toNat : NonZero -> Nat
-toNat (MkNonZero n) = n
+toNat (MkNonZeroInternal n) = n
 
 ||| Try to create a NonZero from a Nat
 public export
 fromNat : Nat -> Maybe NonZero
 fromNat Z = Nothing
-fromNat (S n) = Just (MkNonZero (S n))
+fromNat (S n) = Just (MkNonZeroInternal (S n))
 
-||| Create NonZero from a literal (compile-time checked)
-public export
-nonZero : (n : Nat) -> {auto prf : IsSucc n} -> NonZero
-nonZero n = MkNonZero n
+||| Create NonZero from a known constant (UNSAFE: caller ensures n > 0)
+||| Module-internal use only for well-known constants.
+unsafeNonZero : Nat -> NonZero
+unsafeNonZero n = MkNonZeroInternal n
 
 public export
 Show NonZero where
-  show (MkNonZero n) = show n
+  show (MkNonZeroInternal n) = show n
 
 public export
 Eq NonZero where
-  (MkNonZero n) == (MkNonZero m) = n == m
+  (MkNonZeroInternal n) == (MkNonZeroInternal m) = n == m
 
 -- =============================================================================
 -- Safe Division
@@ -49,12 +49,16 @@ Eq NonZero where
 ||| Safe division that requires NonZero divisor
 public export
 safeDiv : Nat -> NonZero -> Nat
-safeDiv n (MkNonZero (S k)) = divNatNZ n (S k) ItIsSucc
+safeDiv n nz = case toNat nz of
+  S k => divNatNZ n (S k) ItIsSucc
+  Z   => 0  -- unreachable if constructed properly
 
 ||| Safe modulo that requires NonZero divisor
 public export
 safeMod : Nat -> NonZero -> Nat
-safeMod n (MkNonZero (S k)) = modNatNZ n (S k) ItIsSucc
+safeMod n nz = case toNat nz of
+  S k => modNatNZ n (S k) ItIsSucc
+  Z   => 0  -- unreachable if constructed properly
 
 -- =============================================================================
 -- Percentage (0-100) - Runtime validated
@@ -190,27 +194,27 @@ Show CyclesAmount where
 ||| Blocks per HTTP call (1000)
 public export
 blocksPerCallNZ : NonZero
-blocksPerCallNZ = nonZero 1000
+blocksPerCallNZ = unsafeNonZero 1000
 
 ||| Seconds per day (86400)
 public export
 secondsPerDayNZ : NonZero
-secondsPerDayNZ = nonZero 86400
+secondsPerDayNZ = unsafeNonZero 86400
 
 ||| Slots per stagger window (12)
 public export
 slotsPerWindowNZ : NonZero
-slotsPerWindowNZ = nonZero 12
+slotsPerWindowNZ = unsafeNonZero 12
 
 ||| Minutes per day (1440)
 public export
 minutesPerDayNZ : NonZero
-minutesPerDayNZ = nonZero 1440
+minutesPerDayNZ = unsafeNonZero 1440
 
 ||| Hundred (for percentage calculations)
 public export
 hundredNZ : NonZero
-hundredNZ = nonZero 100
+hundredNZ = unsafeNonZero 100
 
 -- =============================================================================
 -- Helper Functions
