@@ -1759,43 +1759,45 @@ Dashboard UI [~] 進行中
         │       ├── [x] 5.3.2 State Management (StableMemory.idr)
         │       └── [x] 5.3.3 Access Control (AccessControl.idr)
         │
-        ├── [ ] 5.4 E2E Testing
+        ├── [~] 5.4 E2E Testing (10/14 tests passing)
         │       │
-        │       ├── [ ] 5.4.1 Local dfx Environment
-        │       │       ├── [ ] 5.4.1.1 dfx.json multi-canister config
+        │       ├── [x] 5.4.1 Local dfx Environment
+        │       │       ├── [x] 5.4.1.1 dfx.json multi-canister config
         │       │       │       ├── ouc canister (Idris2 → WASM)
-        │       │       │       ├── indexer canister (Idris2 → WASM)
-        │       │       │       └── frontend canister (asset)
-        │       │       ├── [ ] 5.4.1.2 Local replica setup
+        │       │       │       ├── (indexer merged into ouc)
+        │       │       │       └── ouc_dashboard canister (asset)
+        │       │       ├── [x] 5.4.1.2 Local replica setup
         │       │       │       ├── dfx start --clean
         │       │       │       ├── Identity configuration
         │       │       │       └── Cycles wallet setup
-        │       │       ├── [ ] 5.4.1.3 Deploy scripts
+        │       │       ├── [x] 5.4.1.3 Deploy scripts
         │       │       │       ├── scripts/deploy-local.sh
         │       │       │       ├── Canister ID extraction
-        │       │       │       └── Environment variable injection
-        │       │       └── [ ] 5.4.1.4 Test data seeding
+        │       │       │       └── Environment variable injection (.env.local)
+        │       │       └── [x] 5.4.1.4 Test data seeding
         │       │               ├── scripts/seed-test-data.sh
-        │       │               ├── Mock auditors (3 principals)
-        │       │               ├── Mock OUs (5 addresses, 2 chains)
-        │       │               └── Mock proposals (10 in various states)
+        │       │               ├── Mock auditors (Alice, Bob - initialized in canister)
+        │       │               ├── storeTestEvent for 5 mock events
+        │       │               └── Verification output for all data
         │       │
-        │       ├── [ ] 5.4.2 Integration Tests
-        │       │       ├── [ ] 5.4.2.1 OUC ↔ Indexer Sync
-        │       │       │       ├── getAuditors() round-trip
-        │       │       │       ├── getSubscription() round-trip
-        │       │       │       ├── getTreasury() round-trip
-        │       │       │       └── Sync interval verification (Tier-based)
-        │       │       ├── [ ] 5.4.2.2 Auditor CRUD Flow
-        │       │       │       ├── Register auditor → Indexer reflects
-        │       │       │       ├── Assign OU → Indexer reflects
-        │       │       │       ├── Remove auditor → Indexer reflects
-        │       │       │       └── Permission denied (non-controller)
-        │       │       ├── [ ] 5.4.2.3 Subscription Management
-        │       │       │       ├── setTier(Economy) → OUC updates
-        │       │       │       ├── setTier(RealTime) → Sync interval changes
-        │       │       │       ├── setAutoRenew(true) → Persists
-        │       │       │       └── Unauthorized caller rejected
+        │       ├── [~] 5.4.2 Integration Tests (scripts/test-integration.sh)
+        │       │       ├── [x] 5.4.2.1 OUC ↔ Indexer Sync (7/7 passing)
+        │       │       │       ├── getVersion() returns nat
+        │       │       │       ├── getAuditors() returns Alice, Bob
+        │       │       │       ├── getSubscription() returns Standard tier
+        │       │       │       ├── getTreasury() returns ckEthBalance
+        │       │       │       ├── getProposalCount() returns nat
+        │       │       │       ├── getAuditorCount() returns nat
+        │       │       │       └── getDashboardSummary() returns event count
+        │       │       ├── [x] 5.4.2.2 Event Indexer Tests (3/3 passing)
+        │       │       │       ├── getDashboardSummary returns event count
+        │       │       │       ├── getOucEvents returns count for limit
+        │       │       │       └── storeTestEvent increments count
+        │       │       ├── [ ] 5.4.2.3 Subscription Management (0/4 - methods not implemented)
+        │       │       │       ├── setTier(Economy) → FAIL (method not in canister_entry.c)
+        │       │       │       ├── setTier(RealTime) → FAIL
+        │       │       │       ├── setAutoRenew(false) → FAIL
+        │       │       │       └── setAutoRenew(true) → FAIL
         │       │       ├── [ ] 5.4.2.4 Proposal Lifecycle
         │       │       │       ├── Create → Pending state
         │       │       │       ├── Assign auditor → UnderReview

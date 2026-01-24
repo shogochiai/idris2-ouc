@@ -14,6 +14,11 @@
           "name": "candid:service"
         }
       ]
+    },
+    "ouc_dashboard": {
+      "type": "assets",
+      "source": ["../idris2-ouc-ui/dist"],
+      "dependencies": ["ouc"]
     }
   },
   "defaults": {
