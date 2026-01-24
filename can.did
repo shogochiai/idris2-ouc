@@ -32,10 +32,11 @@ service : {
     // ==========================================================================
     // Indexer Query Methods (5.3.1)
     // Called by ICP Indexer for OUC sync
+    // MVP: Returns JSON text (proper Candid encoding in Phase 3)
     // ==========================================================================
-    getAuditors: () -> (vec AuditorInfo) query;
-    getSubscription: () -> (opt Subscription) query;
-    getTreasury: () -> (opt Treasury) query;
+    getAuditors: () -> (text) query;
+    getSubscription: () -> (text) query;
+    getTreasury: () -> (text) query;
 
     // ==========================================================================
     // Original Query Methods
@@ -116,12 +117,6 @@ service : {
     // Returns: JSON with fromBlock, toBlock, eventsStored
     fetchEvmLogs: (nat64, nat64, opt text) -> (text);  // (fromBlock, toBlock, address?) -> result_json
 
-    // Test EVM RPC connectivity (eth_blockNumber)
-    testEvmRpc: () -> (text);
-
     // Test direct HTTP outcall (httpbin.org)
     testHttpGet: () -> (text);
-
-    // Test eth_blockNumber via HTTP outcall
-    testEthBlockNumber: () -> (text);
 }

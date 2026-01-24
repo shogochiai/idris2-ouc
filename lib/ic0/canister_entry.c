@@ -1664,6 +1664,59 @@ void canister_query_getProtocolCount(void) {
 }
 
 /* =============================================================================
+ * Indexer Integration Query Methods (5.3.1)
+ * getAuditors, getSubscription, getTreasury for Dashboard UI
+ * ============================================================================= */
+
+/* Get auditors list - returns vec AuditorInfo */
+__attribute__((used, visibility("default"), export_name("canister_query getAuditors")))
+void canister_query_getAuditors(void) {
+    debug("OUC: getAuditors");
+
+    /* Return mock auditor data for MVP
+     * Candid encoding for vec AuditorInfo:
+     * DIDL + type table + vec + records
+     * For MVP, return a simple vec with 2 test auditors */
+
+    /* Build Candid response manually:
+     * type AuditorInfo = record {
+     *   auditorId: text;
+     *   principalId: text;
+     *   name: text;
+     *   assignedOUs: vec text;
+     *   status: text;
+     *   reputation: nat;
+     * }
+     *
+     * For simplicity, return JSON text instead (MVP approach) */
+
+    const char* json = "[{\"auditorId\":\"aud-001\",\"principalId\":\"aaaaa-aa\",\"name\":\"Alice\",\"assignedOUs\":[\"0x1234\"],\"status\":\"active\",\"reputation\":100},{\"auditorId\":\"aud-002\",\"principalId\":\"bbbbb-bb\",\"name\":\"Bob\",\"assignedOUs\":[\"0x5678\",\"0x9abc\"],\"status\":\"active\",\"reputation\":85}]";
+
+    /* Actually need proper Candid vec encoding. For now use text response */
+    reply_candid_text(json);
+}
+
+/* Get subscription info - returns opt Subscription */
+__attribute__((used, visibility("default"), export_name("canister_query getSubscription")))
+void canister_query_getSubscription(void) {
+    debug("OUC: getSubscription");
+
+    /* Return mock subscription for MVP */
+    const char* json = "{\"currentTier\":\"Standard\",\"expiryDate\":\"2026-12-31\",\"autoRenew\":true}";
+    reply_candid_text(json);
+}
+
+/* Get treasury balances - returns opt Treasury */
+__attribute__((used, visibility("default"), export_name("canister_query getTreasury")))
+void canister_query_getTreasury(void) {
+    debug("OUC: getTreasury");
+
+    /* Return mock treasury for MVP */
+    const char* json = "{\"ckEthBalance\":1000000000000000000,\"icpBalance\":500000000,\"cyclesBalance\":10000000000000}";
+    reply_candid_text(json);
+}
+
+/* =============================================================================
  * EVM Event Indexer Query Methods (CMD 30-33)
  * ============================================================================= */
 
