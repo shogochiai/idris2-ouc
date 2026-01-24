@@ -152,6 +152,22 @@ static int32_t call_idris2(int32_t cmd) {
 }
 ```
 
+### ⚠️ canister_entry.c は Tech Debt
+
+**現状:** `lib/ic0/canister_entry.c` (3300行) は手動で書かれている。
+
+**理想:** idris2-wasm の `WasmBuilder/CandidStubs.idr` で自動生成すべき。
+
+| 層 | ファイル | 状態 |
+|----|----------|------|
+| Candid定義 | `can.did` | 単一真実源 |
+| Idris2型 | `Candid/Interface.idr` | USetTier, USetAutoRenew 定義済 |
+| Cエントリ | `canister_entry.c` | **手動** ← Tech Debt |
+
+**問題例:** `can.did` に `setTier`/`setAutoRenew` を追加しても、`canister_entry.c` に手動実装がないと動かない。
+
+**将来:** idris2-wasm で引数デコード機能が実装されたら、`canister_entry.c` を生成物に移行する。
+
 ### テスト再現を作る際の禁則
 
 1. **手書きの canister entrypoint を増やすな** - 既存の `lib/ic0/canister_entry.c` を再利用
